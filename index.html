@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Инвентаризация</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --text: var(--tg-theme-text-color, #000000);
+    --hint: var(--tg-theme-hint-color, #999999);
+    --link: var(--tg-theme-link-color, #2481cc);
+    --btn: var(--tg-theme-button-color, #2481cc);
+    --btn-text: var(--tg-theme-button-text-color, #ffffff);
+    --secondary-bg: var(--tg-theme-secondary-bg-color, #f1f1f1);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", sans-serif;
+    font-size: 16px;
+    overscroll-behavior: contain;
+  }
+  .container { padding: 12px; padding-bottom: 100px; max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 8px 0 12px; }
+  .search-box {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg); padding: 8px 0;
+  }
+  input[type="text"], input[type="number"] {
+    width: 100%; padding: 12px;
+    border: 1px solid var(--hint); border-radius: 10px;
+    background: var(--secondary-bg); color: var(--text);
+    font-size: 16px; outline: none;
+  }
+  input:focus { border-color: var(--btn); }
+  .results { margin-top: 8px; }
+  .product {
+    padding: 12px; margin-bottom: 6px;
+    background: var(--secondary-bg); border-radius: 10px;
+    cursor: pointer; transition: background .1s;
+  }
+  .product:active { background: var(--hint); opacity: 0.7; }
+  .product.selected {
+    background: var(--btn); color: var(--btn-text);
+  }
+  .empty { color: var(--hint); padding: 12px; text-align: center; }
+  .qty-row {
+    display: flex; gap: 8px; align-items: center;
+    margin: 12px 0;
+  }
+  .qty-row input { flex: 1; }
+  button {
+    padding: 12px 18px; border: none; border-radius: 10px;
+    background: var(--btn); color: var(--btn-text);
+    font-size: 16px; font-weight: 600; cursor: pointer;
+  }
+  button:disabled { opacity: 0.4; }
+  button.secondary {
+    background: var(--secondary-bg); color: var(--text);
+  }
+  .added-section { margin-top: 24px; }
+  .added-section h2 {
+    font-size: 15px; margin: 0 0 8px; color: var(--hint);
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .added-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 12px; margin-bottom: 6px;
+    background: var(--secondary-bg); border-radius: 10px;
+  }
+  .added-item .name { flex: 1; font-weight: 500; }
+  .added-item .qty { color: var(--hint); margin-right: 10px; }
+  .added-item .del {
+    background: transparent; color: #d9534f; padding: 4px 10px;
+    font-size: 18px; font-weight: 700;
+  }
+  .finish-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--bg); padding: 10px 12px;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.08);
+  }
+  .finish-bar button { width: 100%; }
+  .counter { color: var(--hint); font-size: 13px; margin-bottom: 4px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📦 Инвентаризация</h1>
+
+  <div class="search-box">
+    <input id="search" type="text" placeholder="Поиск продукта..." autocomplete="off">
+  </div>
+
+  <div id="results" class="results"></div>
+
+  <div id="qty-block" style="display:none;">
+    <div class="qty-row">
+      <input id="qty" type="number" step="0.01" min="0" max="9999" placeholder="Количество">
+      <button id="add-btn">Добавить</button>
+    </div>
+  </div>
+
+  <div class="added-section" id="added-section" style="display:none;">
+    <h2>Добавлено</h2>
+    <div id="added-list"></div>
+  </div>
+</div>
+
+<div class="finish-bar">
+  <div class="counter" id="counter">Ещё ничего не добавлено</div>
+  <button id="finish-btn" disabled>✅ Завершить</button>
+</div>
+
+<script>
+'use strict';
+
+const tg = window.Telegram.WebApp;
+tg.ready();
+tg.expand();
+
+// 87 продуктов из config.py. Порядок соответствует автоинкременту id в БД,
+// поэтому id = index + 1.
+const PRODUCT_NAMES = [
+  "Анчоусы","Апельсин","Варенье","Ветчина Алексеевская","Вырезка Говяжья",
+  "Грибы","Гуанчале","Диженская Горчица","Зеленый Лук","Кедровые Орехи",
+  "Кинза","Красный лук","Крахмал Картофельный","Креветки","Крупа Гречневая",
+  "Крупа Рис","Куриное филе","Лайм","Майонез","Маслины консервированные",
+  "Масло Оливковое","Масло Растительное","Молоко 2,5%","Морковь","Мука",
+  "Овсянка крупа","Огурец свежий","Паприка Копченая","Перец Черный Горошек",
+  "Перец Черный Молотый","Помидор Свежий обычный","Помидор Черри свежий",
+  "ПФ Булочки","ПФ Горчично-медовый соус","ПФ Гречка","ПФ Гуанчале",
+  "ПФ Зеленое масло","ПФ Картофель","ПФ Морковь","ПФ Нисуаз Соус",
+  "ПФ Овсянка","ПФ Помидоры Конфи","ПФ Рис","ПФ Ростбиф",
+  "ПФ Смесь для Карбона","ПФ Смесь для Тунца","ПФ соус Альфредо",
+  "ПФ Соус ПЕСТО","ПФ Соус Сальса","ПФ Спагетти","ПФ Сырники",
+  "ПФ Сырный МИКС","ПФ Творожный Крем","ПФ Филе Куриное","ПФ Чесночный ранч",
+  'ПФ яйцо "Пашот"','ПФ яйцо "Салатный"',"Репчатый лук","Романо Салат",
+  "Руккола/Микс Салата","Сахар","Сгущенка","Семга С.С","Сливки 22%",
+  "Сливки 33%","Сливочное Масло","Сметана","Смородина","Соль",
+  "Сосиски гриль","Спагетти","Сушеный чеснок","Сыр Маасдам",
+  "Сыр Моцарелла","Сыр Пармезан","Сыр Творожный Креметта","Сыр Чеддер",
+  "Сырники","Томаты С.С","Тостовый хлеб","Тунец консервы","Укроп",
+  "Фасоль Консервированная","Фасоль стручковая","Чеснок","Чиабатта",
+  "Шпинат","Шрирача","Яйцо"
+];
+const PRODUCTS = PRODUCT_NAMES.map((name, i) => ({ id: i + 1, name }));
+
+const searchEl   = document.getElementById('search');
+const resultsEl  = document.getElementById('results');
+const qtyBlock   = document.getElementById('qty-block');
+const qtyEl      = document.getElementById('qty');
+const addBtn     = document.getElementById('add-btn');
+const addedSect  = document.getElementById('added-section');
+const addedList  = document.getElementById('added-list');
+const counterEl  = document.getElementById('counter');
+const finishBtn  = document.getElementById('finish-btn');
+
+let selectedProduct = null;
+let addedItems = []; // [{product_id, name, quantity}]
+
+function fmt(n) {
+  return Number.isInteger(n) ? String(n) : String(n).replace(/\.?0+$/, '');
+}
+
+function renderResults() {
+  const q = searchEl.value.trim().toLowerCase();
+  resultsEl.innerHTML = '';
+  let list = PRODUCTS;
+  if (q.length > 0) {
+    list = PRODUCTS.filter(p => p.name.toLowerCase().includes(q));
+  } else {
+    // По умолчанию ничего не показываем, чтобы не грузить экран всеми 87 пунктами
+    resultsEl.innerHTML = '<div class="empty">Введите часть названия для поиска</div>';
+    return;
+  }
+  if (list.length === 0) {
+    resultsEl.innerHTML = '<div class="empty">Продукт не найден</div>';
+    return;
+  }
+  list.slice(0, 50).forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'product' + (selectedProduct && selectedProduct.id === p.id ? ' selected' : '');
+    // Подсветим текущую сумму, если уже добавляли
+    const sum = addedItems
+      .filter(a => a.product_id === p.id)
+      .reduce((s, a) => s + a.quantity, 0);
+    el.textContent = sum > 0 ? `${p.name}  (уже: ${fmt(sum)})` : p.name;
+    el.onclick = () => selectProduct(p);
+    resultsEl.appendChild(el);
+  });
+}
+
+function selectProduct(p) {
+  selectedProduct = p;
+  qtyBlock.style.display = 'block';
+  qtyEl.value = '';
+  qtyEl.focus();
+  renderResults();
+}
+
+function renderAdded() {
+  if (addedItems.length === 0) {
+    addedSect.style.display = 'none';
+    counterEl.textContent = 'Ещё ничего не добавлено';
+    finishBtn.disabled = true;
+    return;
+  }
+  addedSect.style.display = 'block';
+  addedList.innerHTML = '';
+  // Сгруппируем для отображения, но сохраним каждое добавление как отдельную запись
+  addedItems.forEach((item, idx) => {
+    const row = document.createElement('div');
+    row.className = 'added-item';
+    row.innerHTML = `
+      <div class="name"></div>
+      <div class="qty"></div>
+      <button class="del" aria-label="Удалить">×</button>
+    `;
+    row.querySelector('.name').textContent = item.name;
+    row.querySelector('.qty').textContent = fmt(item.quantity);
+    row.querySelector('.del').onclick = () => {
+      addedItems.splice(idx, 1);
+      renderAdded();
+      renderResults();
+    };
+    addedList.appendChild(row);
+  });
+  counterEl.textContent = `Записей: ${addedItems.length}`;
+  finishBtn.disabled = false;
+}
+
+addBtn.onclick = () => {
+  if (!selectedProduct) return;
+  const raw = qtyEl.value.replace(',', '.').trim();
+  const q = parseFloat(raw);
+  if (!Number.isFinite(q) || q < 0 || q > 9999) {
+    tg.showAlert('Введите число от 0 до 9999');
+    return;
+  }
+  addedItems.push({
+    product_id: selectedProduct.id,
+    name: selectedProduct.name,
+    quantity: q
+  });
+  // оставляем продукт выбранным — частый кейс «нашли ещё в другом месте»
+  qtyEl.value = '';
+  qtyEl.focus();
+  renderAdded();
+  renderResults();
+};
+
+qtyEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); addBtn.click(); }
+});
+
+searchEl.addEventListener('input', () => {
+  // При вводе — снимаем выбор, чтобы повар выбрал из новых результатов
+  selectedProduct = null;
+  qtyBlock.style.display = 'none';
+  renderResults();
+});
+
+finishBtn.onclick = () => {
+  if (addedItems.length === 0) return;
+  tg.showConfirm(`Отправить ${addedItems.length} записей?`, ok => {
+    if (!ok) return;
+    try {
+      tg.sendData(JSON.stringify(addedItems));
+      tg.close();
+    } catch (e) {
+      tg.showAlert('Не удалось отправить данные: ' + e);
+    }
+  });
+};
+
+// Старт
+renderResults();
+renderAdded();
+</script>
+</body>
+</html>
