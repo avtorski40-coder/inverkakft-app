@@ -14,6 +14,9 @@
     --btn: var(--tg-theme-button-color, #2481cc);
     --btn-text: var(--tg-theme-button-text-color, #ffffff);
     --secondary-bg: var(--tg-theme-secondary-bg-color, #f1f1f1);
+    --section-bg: var(--tg-theme-section-bg-color, #ffffff);
+    --section-header: var(--tg-theme-section-header-text-color, #6d6d72);
+    --destructive: var(--tg-theme-destructive-text-color, #d9534f);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -21,98 +24,168 @@
     background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
                  "Helvetica Neue", sans-serif;
-    font-size: 16px;
+    font-size: 16px; line-height: 1.4;
     overscroll-behavior: contain;
   }
-  .container { padding: 12px; padding-bottom: 100px; max-width: 720px; margin: 0 auto; }
-  h1 { font-size: 18px; margin: 8px 0 12px; }
-  .search-box {
-    position: sticky; top: 0; z-index: 10;
-    background: var(--bg); padding: 8px 0;
+  .container { padding: 12px; padding-bottom: 24px; max-width: 720px; margin: 0 auto; }
+
+  /* Tabs */
+  .tabs {
+    display: flex; gap: 6px; margin-bottom: 12px;
+    background: var(--secondary-bg); padding: 4px; border-radius: 10px;
+    position: sticky; top: 0; z-index: 20;
   }
+  .tab {
+    flex: 1; padding: 10px 8px; text-align: center;
+    border-radius: 8px; font-size: 14px; font-weight: 600;
+    color: var(--hint); cursor: pointer; transition: all .15s;
+  }
+  .tab.active { background: var(--bg); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+
+  /* Inputs */
   input[type="text"], input[type="number"] {
     width: 100%; padding: 12px;
-    border: 1px solid var(--hint); border-radius: 10px;
+    border: 1px solid transparent; border-radius: 10px;
     background: var(--secondary-bg); color: var(--text);
     font-size: 16px; outline: none;
   }
   input:focus { border-color: var(--btn); }
-  .results { margin-top: 8px; }
+
+  /* Search */
+  .search-box {
+    position: sticky; top: 56px; z-index: 15;
+    background: var(--bg); padding: 8px 0;
+  }
+  .search-hint {
+    color: var(--hint); font-size: 13px; margin: 4px 4px 0;
+  }
+
+  /* Product list */
+  .results { margin-top: 6px; }
   .product {
     padding: 12px; margin-bottom: 6px;
     background: var(--secondary-bg); border-radius: 10px;
-    cursor: pointer; transition: background .1s;
+    transition: background .12s;
   }
-  .product:active { background: var(--hint); opacity: 0.7; }
-  .product.selected {
-    background: var(--btn); color: var(--btn-text);
-  }
-  .empty { color: var(--hint); padding: 12px; text-align: center; }
-  .qty-row {
-    display: flex; gap: 8px; align-items: center;
-    margin: 12px 0;
-  }
-  .qty-row input { flex: 1; }
+  .product:active { opacity: 0.7; }
+  .product.with-sum { border-left: 3px solid var(--btn); padding-left: 9px; }
+  .product .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .product .name { flex: 1; font-weight: 500; }
+  .product .sum { color: var(--btn); font-weight: 600; font-size: 14px; white-space: nowrap; }
+  .product .expand { display: none; margin-top: 10px; }
+  .product.expanded { background: var(--bg); box-shadow: inset 0 0 0 1px var(--btn); }
+  .product.expanded .expand { display: flex; gap: 8px; }
+  .product.expanded .expand input { flex: 1; }
+  .product.expanded .expand button { padding: 0 16px; }
+
+  .empty { color: var(--hint); padding: 24px 12px; text-align: center; font-size: 14px; }
+
   button {
     padding: 12px 18px; border: none; border-radius: 10px;
     background: var(--btn); color: var(--btn-text);
     font-size: 16px; font-weight: 600; cursor: pointer;
   }
   button:disabled { opacity: 0.4; }
-  button.secondary {
-    background: var(--secondary-bg); color: var(--text);
+  button.secondary { background: var(--secondary-bg); color: var(--text); }
+  button.danger { background: transparent; color: var(--destructive); }
+
+  /* Added */
+  .section {
+    margin-top: 20px; background: var(--section-bg);
+    border-radius: 12px; padding: 8px;
   }
-  .added-section { margin-top: 24px; }
-  .added-section h2 {
-    font-size: 15px; margin: 0 0 8px; color: var(--hint);
-    text-transform: uppercase; letter-spacing: 0.5px;
+  .section-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 8px 8px; color: var(--section-header);
+    font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+    text-transform: uppercase;
   }
   .added-item {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 10px 12px; margin-bottom: 6px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; margin: 2px 0;
     background: var(--secondary-bg); border-radius: 10px;
   }
-  .added-item .name { flex: 1; font-weight: 500; }
-  .added-item .qty { color: var(--hint); margin-right: 10px; }
+  .added-item .name { flex: 1; }
+  .added-item .qty {
+    min-width: 60px; text-align: right;
+    font-variant-numeric: tabular-nums; font-weight: 600;
+  }
   .added-item .del {
-    background: transparent; color: #d9534f; padding: 4px 10px;
-    font-size: 18px; font-weight: 700;
+    background: transparent; color: var(--destructive);
+    padding: 4px 10px; font-size: 22px; line-height: 1; font-weight: 400;
   }
-  .finish-bar {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    background: var(--bg); padding: 10px 12px;
-    box-shadow: 0 -2px 8px rgba(0,0,0,0.08);
+
+  /* Suggest product tab */
+  .form-group { margin-bottom: 14px; }
+  .form-group label {
+    display: block; margin-bottom: 6px; font-size: 13px;
+    color: var(--hint); font-weight: 600;
   }
-  .finish-bar button { width: 100%; }
-  .counter { color: var(--hint); font-size: 13px; margin-bottom: 4px; text-align: center; }
+  .unit-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    padding: 6px 12px; background: var(--secondary-bg); color: var(--text);
+    border-radius: 16px; font-size: 13px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .chip.active { background: var(--btn); color: var(--btn-text); }
+
+  .footer-counter {
+    padding: 8px; text-align: center;
+    color: var(--hint); font-size: 13px;
+  }
+
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>📦 Инвентаризация</h1>
-
-  <div class="search-box">
-    <input id="search" type="text" placeholder="Поиск продукта..." autocomplete="off">
+  <div class="tabs">
+    <div class="tab active" data-tab="inv" id="tab-inv">📦 Инвентаризация</div>
+    <div class="tab" data-tab="new" id="tab-new">➕ Новый продукт</div>
   </div>
 
-  <div id="results" class="results"></div>
+  <!-- ============ Inventory ============ -->
+  <div id="page-inv">
+    <div class="search-box">
+      <input id="search" type="text" placeholder="🔎 Поиск продукта..." autocomplete="off">
+      <div class="search-hint" id="search-hint">Начните вводить название или откройте любую категорию ниже</div>
+    </div>
 
-  <div id="qty-block" style="display:none;">
-    <div class="qty-row">
-      <input id="qty" type="number" step="0.01" min="0" max="9999" placeholder="Количество">
-      <button id="add-btn">Добавить</button>
+    <div id="results" class="results"></div>
+
+    <div class="section" id="added-section">
+      <div class="section-head">
+        <span id="added-title">Добавлено</span>
+        <button class="danger" id="clear-btn" style="font-size:13px; padding:4px 8px;">Очистить</button>
+      </div>
+      <div id="added-list"></div>
+    </div>
+
+    <div class="footer-counter" id="counter"></div>
+  </div>
+
+  <!-- ============ Suggest new product ============ -->
+  <div id="page-new" class="hidden">
+    <div class="form-group">
+      <label>Название продукта</label>
+      <input id="new-name" type="text" placeholder="Например: Базилик свежий" maxlength="80">
+    </div>
+    <div class="form-group">
+      <label>Единица измерения</label>
+      <input id="new-unit" type="text" placeholder="кг / шт / л / г" maxlength="20">
+      <div class="unit-chips">
+        <div class="chip" data-unit="кг">кг</div>
+        <div class="chip" data-unit="шт">шт</div>
+        <div class="chip" data-unit="л">л</div>
+        <div class="chip" data-unit="г">г</div>
+        <div class="chip" data-unit="мл">мл</div>
+        <div class="chip" data-unit="упак">упак</div>
+      </div>
+    </div>
+    <div class="empty" style="text-align:left;">
+      Заявка отправится менеджеру. Когда он одобрит — продукт появится в общем списке.
     </div>
   </div>
-
-  <div class="added-section" id="added-section" style="display:none;">
-    <h2>Добавлено</h2>
-    <div id="added-list"></div>
-  </div>
-</div>
-
-<div class="finish-bar">
-  <div class="counter" id="counter">Ещё ничего не добавлено</div>
-  <button id="finish-btn" disabled>✅ Завершить</button>
 </div>
 
 <script>
@@ -121,9 +194,10 @@
 const tg = window.Telegram.WebApp;
 tg.ready();
 tg.expand();
+tg.enableClosingConfirmation();
 
-// 87 продуктов из config.py. Порядок соответствует автоинкременту id в БД,
-// поэтому id = index + 1.
+// ============ Каталог продуктов ============
+// 87 продуктов в порядке config.py — id = index + 1 (соответствует автоинкременту в БД).
 const PRODUCT_NAMES = [
   "Анчоусы","Апельсин","Варенье","Ветчина Алексеевская","Вырезка Говяжья",
   "Грибы","Гуанчале","Диженская Горчица","Зеленый Лук","Кедровые Орехи",
@@ -149,69 +223,160 @@ const PRODUCT_NAMES = [
 ];
 const PRODUCTS = PRODUCT_NAMES.map((name, i) => ({ id: i + 1, name }));
 
-const searchEl   = document.getElementById('search');
-const resultsEl  = document.getElementById('results');
-const qtyBlock   = document.getElementById('qty-block');
-const qtyEl      = document.getElementById('qty');
-const addBtn     = document.getElementById('add-btn');
-const addedSect  = document.getElementById('added-section');
-const addedList  = document.getElementById('added-list');
-const counterEl  = document.getElementById('counter');
-const finishBtn  = document.getElementById('finish-btn');
+// ============ DOM refs ============
+const tabInv      = document.getElementById('tab-inv');
+const tabNew      = document.getElementById('tab-new');
+const pageInv     = document.getElementById('page-inv');
+const pageNew     = document.getElementById('page-new');
+const searchEl    = document.getElementById('search');
+const searchHint  = document.getElementById('search-hint');
+const resultsEl   = document.getElementById('results');
+const addedSect   = document.getElementById('added-section');
+const addedList   = document.getElementById('added-list');
+const addedTitle  = document.getElementById('added-title');
+const counterEl   = document.getElementById('counter');
+const clearBtn    = document.getElementById('clear-btn');
+const newName     = document.getElementById('new-name');
+const newUnit     = document.getElementById('new-unit');
 
-let selectedProduct = null;
+// ============ State ============
+let mode = 'inv'; // 'inv' | 'new'
+let expandedProductId = null;
 let addedItems = []; // [{product_id, name, quantity}]
 
+// ============ Helpers ============
 function fmt(n) {
-  return Number.isInteger(n) ? String(n) : String(n).replace(/\.?0+$/, '');
+  if (!Number.isFinite(n)) return '0';
+  if (Number.isInteger(n)) return String(n);
+  return parseFloat(n.toFixed(3)).toString();
+}
+function haptic(kind = 'light') {
+  try { tg.HapticFeedback.impactOccurred(kind); } catch (_) {}
+}
+function hapticNotify(kind = 'success') {
+  try { tg.HapticFeedback.notificationOccurred(kind); } catch (_) {}
+}
+function sumByProduct(pid) {
+  return addedItems.filter(a => a.product_id === pid).reduce((s, a) => s + a.quantity, 0);
+}
+function countByProduct(pid) {
+  return addedItems.filter(a => a.product_id === pid).length;
 }
 
+// ============ Tabs ============
+function setMode(m) {
+  mode = m;
+  tabInv.classList.toggle('active', m === 'inv');
+  tabNew.classList.toggle('active', m === 'new');
+  pageInv.classList.toggle('hidden', m !== 'inv');
+  pageNew.classList.toggle('hidden', m !== 'new');
+  haptic('soft');
+  updateMainButton();
+}
+tabInv.onclick = () => setMode('inv');
+tabNew.onclick = () => setMode('new');
+
+// ============ Inventory: search + render ============
 function renderResults() {
   const q = searchEl.value.trim().toLowerCase();
   resultsEl.innerHTML = '';
-  let list = PRODUCTS;
+
+  let list;
   if (q.length > 0) {
     list = PRODUCTS.filter(p => p.name.toLowerCase().includes(q));
+    searchHint.textContent = list.length === 0
+      ? 'Ничего не найдено'
+      : `Найдено: ${list.length}`;
   } else {
-    // По умолчанию ничего не показываем, чтобы не грузить экран всеми 87 пунктами
-    resultsEl.innerHTML = '<div class="empty">Введите часть названия для поиска</div>';
-    return;
+    // Без запроса: показываем добавленные ранее в этой сессии + подсказку
+    list = PRODUCTS.filter(p => sumByProduct(p.id) > 0);
+    if (list.length === 0) {
+      searchHint.textContent = 'Начните вводить название продукта';
+      resultsEl.innerHTML = '<div class="empty">Введите часть названия в поле выше</div>';
+      return;
+    } else {
+      searchHint.textContent = `Уже добавленные (${list.length}). Введите запрос для поиска новых.`;
+    }
   }
+
   if (list.length === 0) {
     resultsEl.innerHTML = '<div class="empty">Продукт не найден</div>';
     return;
   }
-  list.slice(0, 50).forEach(p => {
+
+  list.slice(0, 60).forEach(p => {
+    const sum = sumByProduct(p.id);
+    const cnt = countByProduct(p.id);
+    const isExp = expandedProductId === p.id;
+
     const el = document.createElement('div');
-    el.className = 'product' + (selectedProduct && selectedProduct.id === p.id ? ' selected' : '');
-    // Подсветим текущую сумму, если уже добавляли
-    const sum = addedItems
-      .filter(a => a.product_id === p.id)
-      .reduce((s, a) => s + a.quantity, 0);
-    el.textContent = sum > 0 ? `${p.name}  (уже: ${fmt(sum)})` : p.name;
-    el.onclick = () => selectProduct(p);
+    el.className = 'product' + (sum > 0 ? ' with-sum' : '') + (isExp ? ' expanded' : '');
+    el.innerHTML = `
+      <div class="row">
+        <div class="name"></div>
+        ${sum > 0 ? `<div class="sum">${fmt(sum)}${cnt > 1 ? ` · ${cnt} зап.` : ''}</div>` : ''}
+      </div>
+      <div class="expand">
+        <input type="number" step="0.01" min="0" max="9999" placeholder="Количество" inputmode="decimal">
+        <button class="add">Добавить</button>
+      </div>
+    `;
+    el.querySelector('.name').textContent = p.name;
+    const input = el.querySelector('input');
+    const addBtn = el.querySelector('.add');
+
+    el.querySelector('.row').onclick = (e) => {
+      // Тап по строке раскрывает/сворачивает
+      if (e.target === input || e.target === addBtn) return;
+      expandedProductId = isExp ? null : p.id;
+      haptic('light');
+      renderResults();
+      // Сфокусируемся на инпуте после ре-рендера
+      if (!isExp) {
+        setTimeout(() => {
+          const newEl = [...document.querySelectorAll('.product.expanded input')][0];
+          if (newEl) newEl.focus();
+        }, 0);
+      }
+    };
+
+    addBtn.onclick = (e) => {
+      e.stopPropagation();
+      const raw = (input.value || '').replace(',', '.').trim();
+      const q = parseFloat(raw);
+      if (!Number.isFinite(q) || q < 0 || q > 9999) {
+        hapticNotify('error');
+        tg.showAlert('Введите число от 0 до 9999');
+        return;
+      }
+      addedItems.push({ product_id: p.id, name: p.name, quantity: q });
+      hapticNotify('success');
+      input.value = '';
+      // Сворачиваем после успешного добавления, чтобы освободить экран
+      expandedProductId = null;
+      renderResults();
+      renderAdded();
+      updateMainButton();
+    };
+
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addBtn.click(); }
+    };
+
     resultsEl.appendChild(el);
   });
-}
-
-function selectProduct(p) {
-  selectedProduct = p;
-  qtyBlock.style.display = 'block';
-  qtyEl.value = '';
-  qtyEl.focus();
-  renderResults();
 }
 
 function renderAdded() {
   if (addedItems.length === 0) {
     addedSect.style.display = 'none';
-    counterEl.textContent = 'Ещё ничего не добавлено';
-    finishBtn.disabled = true;
+    counterEl.textContent = '';
     return;
   }
   addedSect.style.display = 'block';
+  addedTitle.textContent = `Добавлено · ${addedItems.length}`;
   addedList.innerHTML = '';
-  // Сгруппируем для отображения, но сохраним каждое добавление как отдельную запись
+
   addedItems.forEach((item, idx) => {
     const row = document.createElement('div');
     row.className = 'added-item';
@@ -224,62 +389,104 @@ function renderAdded() {
     row.querySelector('.qty').textContent = fmt(item.quantity);
     row.querySelector('.del').onclick = () => {
       addedItems.splice(idx, 1);
+      haptic('medium');
       renderAdded();
       renderResults();
+      updateMainButton();
     };
     addedList.appendChild(row);
   });
-  counterEl.textContent = `Записей: ${addedItems.length}`;
-  finishBtn.disabled = false;
+
+  // Итог по уникальным продуктам
+  const unique = new Set(addedItems.map(a => a.product_id)).size;
+  counterEl.textContent = `${addedItems.length} ${plural(addedItems.length, 'запись','записи','записей')} по ${unique} ${plural(unique, 'продукту','продуктам','продуктам')}`;
 }
 
-addBtn.onclick = () => {
-  if (!selectedProduct) return;
-  const raw = qtyEl.value.replace(',', '.').trim();
-  const q = parseFloat(raw);
-  if (!Number.isFinite(q) || q < 0 || q > 9999) {
-    tg.showAlert('Введите число от 0 до 9999');
-    return;
-  }
-  addedItems.push({
-    product_id: selectedProduct.id,
-    name: selectedProduct.name,
-    quantity: q
-  });
-  // оставляем продукт выбранным — частый кейс «нашли ещё в другом месте»
-  qtyEl.value = '';
-  qtyEl.focus();
-  renderAdded();
-  renderResults();
-};
+function plural(n, one, few, many) {
+  const m = Math.abs(n) % 100, m1 = m % 10;
+  if (m > 10 && m < 20) return many;
+  if (m1 > 1 && m1 < 5) return few;
+  if (m1 === 1) return one;
+  return many;
+}
 
-qtyEl.addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); addBtn.click(); }
-});
+clearBtn.onclick = () => {
+  if (addedItems.length === 0) return;
+  tg.showConfirm('Очистить весь список?', ok => {
+    if (!ok) return;
+    addedItems = [];
+    hapticNotify('warning');
+    renderAdded();
+    renderResults();
+    updateMainButton();
+  });
+};
 
 searchEl.addEventListener('input', () => {
-  // При вводе — снимаем выбор, чтобы повар выбрал из новых результатов
-  selectedProduct = null;
-  qtyBlock.style.display = 'none';
+  expandedProductId = null;
   renderResults();
 });
 
-finishBtn.onclick = () => {
-  if (addedItems.length === 0) return;
-  tg.showConfirm(`Отправить ${addedItems.length} записей?`, ok => {
-    if (!ok) return;
-    try {
-      tg.sendData(JSON.stringify(addedItems));
-      tg.close();
-    } catch (e) {
-      tg.showAlert('Не удалось отправить данные: ' + e);
-    }
-  });
-};
+// ============ Suggest product tab ============
+document.querySelectorAll('.chip').forEach(c => {
+  c.onclick = () => {
+    newUnit.value = c.dataset.unit;
+    document.querySelectorAll('.chip').forEach(x => x.classList.toggle('active', x === c));
+    haptic('light');
+    updateMainButton();
+  };
+});
+newName.addEventListener('input', updateMainButton);
+newUnit.addEventListener('input', updateMainButton);
 
-// Старт
+// ============ Telegram MainButton ============
+function updateMainButton() {
+  const mb = tg.MainButton;
+  if (mode === 'inv') {
+    if (addedItems.length === 0) {
+      mb.hide();
+    } else {
+      mb.setText(`✅ Завершить · ${addedItems.length}`);
+      mb.show();
+      mb.enable();
+    }
+  } else {
+    // suggest mode
+    const ok = newName.value.trim().length >= 2 && newUnit.value.trim().length >= 1;
+    mb.setText('➕ Отправить менеджеру');
+    mb.show();
+    if (ok) mb.enable(); else mb.disable();
+  }
+}
+
+tg.MainButton.onClick(() => {
+  if (mode === 'inv') {
+    if (addedItems.length === 0) return;
+    tg.showConfirm(`Отправить ${addedItems.length} ${plural(addedItems.length,'запись','записи','записей')}?`, ok => {
+      if (!ok) return;
+      const payload = { action: 'inventory', items: addedItems };
+      tg.sendData(JSON.stringify(payload));
+      tg.close();
+    });
+  } else {
+    const name = newName.value.trim();
+    const unit = newUnit.value.trim();
+    if (name.length < 2 || unit.length < 1) {
+      hapticNotify('error');
+      tg.showAlert('Заполните название и единицу');
+      return;
+    }
+    const payload = { action: 'suggest_product', name, unit };
+    tg.sendData(JSON.stringify(payload));
+    tg.close();
+  }
+});
+
+// ============ Init ============
 renderResults();
 renderAdded();
+updateMainButton();
+searchEl.focus();
 </script>
 </body>
 </html>
