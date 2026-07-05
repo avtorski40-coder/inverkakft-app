@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Инвентаризация</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --text: var(--tg-theme-text-color, #000000);
+    --hint: var(--tg-theme-hint-color, #999999);
+    --link: var(--tg-theme-link-color, #2481cc);
+    --btn: var(--tg-theme-button-color, #2481cc);
+    --btn-text: var(--tg-theme-button-text-color, #ffffff);
+    --secondary-bg: var(--tg-theme-secondary-bg-color, #f1f1f1);
+    --section-bg: var(--tg-theme-section-bg-color, #ffffff);
+    --section-header: var(--tg-theme-section-header-text-color, #6d6d72);
+    --destructive: var(--tg-theme-destructive-text-color, #d9534f);
+    --accent: #34a853;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", sans-serif;
+    font-size: 16px; line-height: 1.4;
+    overscroll-behavior: contain;
+  }
+  .container { padding: 12px; padding-bottom: 24px; max-width: 720px; margin: 0 auto; }
+
+  /* Tabs */
+  .tabs {
+    display: flex; gap: 6px; margin-bottom: 12px;
+    background: var(--secondary-bg); padding: 4px; border-radius: 10px;
+    position: sticky; top: 0; z-index: 20;
+  }
+  .tab {
+    flex: 1; padding: 10px 8px; text-align: center;
+    border-radius: 8px; font-size: 14px; font-weight: 600;
+    color: var(--hint); cursor: pointer; transition: all .15s;
+  }
+  .tab.active { background: var(--bg); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+
+  /* Inputs */
+  input[type="text"], input[type="number"] {
+    width: 100%; padding: 12px;
+    border: 1px solid transparent; border-radius: 10px;
+    background: var(--secondary-bg); color: var(--text);
+    font-size: 16px; outline: none;
+  }
+  input:focus { border-color: var(--btn); }
+
+  /* Search */
+  .search-box {
+    position: sticky; top: 56px; z-index: 15;
+    background: var(--bg); padding: 8px 0;
+  }
+  .search-hint {
+    color: var(--hint); font-size: 13px; margin: 4px 4px 0;
+  }
+
+  /* Product list */
+  .results { margin-top: 6px; }
+  .product {
+    padding: 12px; margin-bottom: 6px;
+    background: var(--secondary-bg); border-radius: 10px;
+    transition: background .12s;
+  }
+  .product:active { opacity: 0.7; }
+  .product.with-sum { border-left: 3px solid var(--btn); padding-left: 9px; }
+  .product.is-new { border-left: 3px solid var(--accent); padding-left: 9px; }
+  .product .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .product .name { flex: 1; font-weight: 500; }
+  .product .badge {
+    display: inline-block; margin-left: 6px; padding: 1px 6px;
+    background: var(--accent); color: #fff; font-size: 10px;
+    font-weight: 700; border-radius: 6px; letter-spacing: 0.5px;
+    vertical-align: middle;
+  }
+  .product .sum { color: var(--btn); font-weight: 600; font-size: 14px; white-space: nowrap; }
+  .product .expand { display: none; margin-top: 10px; }
+  .product.expanded { background: var(--bg); box-shadow: inset 0 0 0 1px var(--btn); }
+  .product.expanded .expand { display: flex; gap: 8px; }
+  .product.expanded .expand input { flex: 1; }
+  .product.expanded .expand button { padding: 0 16px; }
+
+  .empty { color: var(--hint); padding: 24px 12px; text-align: center; font-size: 14px; }
+
+  button {
+    padding: 12px 18px; border: none; border-radius: 10px;
+    background: var(--btn); color: var(--btn-text);
+    font-size: 16px; font-weight: 600; cursor: pointer;
+  }
+  button:disabled { opacity: 0.4; }
+  button.secondary { background: var(--secondary-bg); color: var(--text); }
+  button.danger { background: transparent; color: var(--destructive); }
+  button.wide { width: 100%; }
+
+  /* Added */
+  .section {
+    margin-top: 20px; background: var(--section-bg);
+    border-radius: 12px; padding: 8px;
+  }
+  .section-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 8px 8px; color: var(--section-header);
+    font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .added-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; margin: 2px 0;
+    background: var(--secondary-bg); border-radius: 10px;
+  }
+  .added-item .name { flex: 1; }
+  .added-item .qty {
+    min-width: 60px; text-align: right;
+    font-variant-numeric: tabular-nums; font-weight: 600;
+  }
+  .added-item .del {
+    background: transparent; color: var(--destructive);
+    padding: 4px 10px; font-size: 22px; line-height: 1; font-weight: 400;
+  }
+
+  /* Add-product tab */
+  .form-group { margin-bottom: 14px; }
+  .form-group label {
+    display: block; margin-bottom: 6px; font-size: 13px;
+    color: var(--hint); font-weight: 600;
+  }
+  .unit-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    padding: 6px 12px; background: var(--secondary-bg); color: var(--text);
+    border-radius: 16px; font-size: 13px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .chip.active { background: var(--btn); color: var(--btn-text); }
+
+  .footer-counter {
+    padding: 8px; text-align: center;
+    color: var(--hint); font-size: 13px;
+  }
+
+  .version-tag {
+    position: fixed; bottom: 4px; right: 6px;
+    padding: 2px 6px; font-size: 10px; opacity: 0.5;
+    background: var(--accent); color: #fff; border-radius: 4px;
+    z-index: 999; pointer-events: none;
+  }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="tabs">
+    <div class="tab active" data-tab="inv" id="tab-inv">📦 Инвентаризация</div>
+    <div class="tab" data-tab="new" id="tab-new">➕ Новый продукт</div>
+  </div>
+
+  <!-- ============ Inventory ============ -->
+  <div id="page-inv">
+    <div class="search-box">
+      <input id="search" type="text" placeholder="🔎 Поиск продукта..." autocomplete="off">
+      <div class="search-hint" id="search-hint">Начните вводить название или откройте любую категорию ниже</div>
+    </div>
+
+    <div id="results" class="results"></div>
+
+    <div class="section" id="added-section">
+      <div class="section-head">
+        <span id="added-title">Добавлено</span>
+        <button class="danger" id="clear-btn" style="font-size:13px; padding:4px 8px;">Очистить</button>
+      </div>
+      <div id="added-list"></div>
+    </div>
+
+    <div class="footer-counter" id="counter"></div>
+  </div>
+
+  <!-- ============ Add new product ============ -->
+  <div id="page-new" class="hidden">
+    <div class="form-group">
+      <label>Название продукта</label>
+      <input id="new-name" type="text" placeholder="Например: Базилик свежий" maxlength="80">
+    </div>
+    <div class="form-group">
+      <label>Единица измерения</label>
+      <input id="new-unit" type="text" placeholder="кг / шт / л / г" maxlength="20">
+      <div class="unit-chips">
+        <div class="chip" data-unit="кг">кг</div>
+        <div class="chip" data-unit="шт">шт</div>
+        <div class="chip" data-unit="л">л</div>
+        <div class="chip" data-unit="г">г</div>
+        <div class="chip" data-unit="мл">мл</div>
+        <div class="chip" data-unit="упак">упак</div>
+      </div>
+    </div>
+    <button id="add-new-btn" class="wide">➕ Добавить в список</button>
+    <div class="empty" style="text-align:left;">
+      Продукт сразу появится в вашем списке — можно вернуться и посчитать.
+      Менеджеру уйдёт уведомление после завершения инвентаризации.
+    </div>
+  </div>
+</div>
+<div class="version-tag" id="version-tag">v2</div>
+
+<script>
+'use strict';
+
+const tg = window.Telegram.WebApp;
+tg.ready();
+tg.expand();
+tg.enableClosingConfirmation();
+
+// ============ Fallback каталог ============
+// Используется если бот не передал каталог (например открыли mini_app напрямую).
+const FALLBACK_PRODUCT_NAMES = [
+  "Анчоусы","Апельсин","Варенье","Ветчина Алексеевская","Вырезка Говяжья",
+  "Грибы","Гуанчале","Диженская Горчица","Зеленый Лук","Кедровые Орехи",
+  "Кинза","Красный лук","Крахмал Картофельный","Креветки","Крупа Гречневая",
+  "Крупа Рис","Куриное филе","Лайм","Майонез","Маслины консервированные",
+  "Масло Оливковое","Масло Растительное","Молоко 2,5%","Морковь","Мука",
+  "Овсянка крупа","Огурец свежий","Паприка Копченая","Перец Черный Горошек",
+  "Перец Черный Молотый","Помидор Свежий обычный","Помидор Черри свежий",
+  "ПФ Булочки","ПФ Горчично-медовый соус","ПФ Гречка","ПФ Гуанчале",
+  "ПФ Зеленое масло","ПФ Картофель","ПФ Морковь","ПФ Нисуаз Соус",
+  "ПФ Овсянка","ПФ Помидоры Конфи","ПФ Рис","ПФ Ростбиф",
+  "ПФ Смесь для Карбона","ПФ Смесь для Тунца","ПФ соус Альфредо",
+  "ПФ Соус ПЕСТО","ПФ Соус Сальса","ПФ Спагетти","ПФ Сырники",
+  "ПФ Сырный МИКС","ПФ Творожный Крем","ПФ Филе Куриное","ПФ Чесночный ранч",
+  'ПФ яйцо "Пашот"','ПФ яйцо "Салатный"',"Репчатый лук","Романо Салат",
+  "Руккола/Микс Салата","Сахар","Сгущенка","Семга С.С","Сливки 22%",
+  "Сливки 33%","Сливочное Масло","Сметана","Смородина","Соль",
+  "Сосиски гриль","Спагетти","Сушеный чеснок","Сыр Маасдам",
+  "Сыр Моцарелла","Сыр Пармезан","Сыр Творожный Креметта","Сыр Чеддер",
+  "Сырники","Томаты С.С","Тостовый хлеб","Тунец консервы","Укроп",
+  "Фасоль Консервированная","Фасоль стручковая","Чеснок","Чиабатта",
+  "Шпинат","Шрирача","Яйцо"
+];
+
+// ============ Разбор URL hash ============
+// Бот пакует в hash base64(url-safe) от JSON: {c: [[id,name,unit],...], t: [[pid,qty,cnt],...]}
+function parseHash() {
+  try {
+    let raw = (window.location.hash || '').replace(/^#/, '');
+    if (!raw) return {c: null, t: []};
+    let b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const text = new TextDecoder('utf-8').decode(bytes);
+    return JSON.parse(text);
+  } catch (e) {
+    return {c: null, t: []};
+  }
+}
+const _parsed = parseHash();
+
+// ============ Каталог + prefill ============
+let PRODUCTS;
+if (Array.isArray(_parsed.c) && _parsed.c.length > 0) {
+  PRODUCTS = _parsed.c.map(([id, name, unit]) => ({id, name, unit: unit || 'кг/шт'}));
+} else {
+  PRODUCTS = FALLBACK_PRODUCT_NAMES.map((name, i) => ({id: i + 1, name, unit: 'кг/шт'}));
+}
+
+// Показываем маркер: v2 + число продуктов из hash (0 = fallback).
+try {
+  const vt = document.getElementById('version-tag');
+  const src = Array.isArray(_parsed.c) ? _parsed.c.length : 0;
+  vt.textContent = `v2 · ${src || 'fb'} prod`;
+} catch (_) {}
+
+const loadedTotals = {}; // {pid: {quantity, count}}
+(_parsed.t || []).forEach(entry => {
+  if (!Array.isArray(entry) || entry.length < 2) return;
+  const pid = parseInt(entry[0], 10);
+  const qty = parseFloat(entry[1]);
+  const cnt = parseInt(entry[2] || '1', 10);
+  if (Number.isInteger(pid) && Number.isFinite(qty)) {
+    loadedTotals[pid] = {quantity: qty, count: cnt};
+  }
+});
+
+// ============ DOM refs ============
+const tabInv      = document.getElementById('tab-inv');
+const tabNew      = document.getElementById('tab-new');
+const pageInv     = document.getElementById('page-inv');
+const pageNew     = document.getElementById('page-new');
+const searchEl    = document.getElementById('search');
+const searchHint  = document.getElementById('search-hint');
+const resultsEl   = document.getElementById('results');
+const addedSect   = document.getElementById('added-section');
+const addedList   = document.getElementById('added-list');
+const addedTitle  = document.getElementById('added-title');
+const counterEl   = document.getElementById('counter');
+const clearBtn    = document.getElementById('clear-btn');
+const newName     = document.getElementById('new-name');
+const newUnit     = document.getElementById('new-unit');
+const addNewBtn   = document.getElementById('add-new-btn');
+
+// ============ State ============
+let mode = 'inv';
+let expandedProductId = null;
+let addedItems = [];       // [{product_id, name, quantity}]
+let newProducts = [];      // [{tempId, name, unit}]
+let nextTempId = -1;
+
+// ============ Helpers ============
+function fmt(n) {
+  if (!Number.isFinite(n)) return '0';
+  if (Number.isInteger(n)) return String(n);
+  return parseFloat(n.toFixed(3)).toString();
+}
+function haptic(kind = 'light') {
+  try { tg.HapticFeedback.impactOccurred(kind); } catch (_) {}
+}
+function hapticNotify(kind = 'success') {
+  try { tg.HapticFeedback.notificationOccurred(kind); } catch (_) {}
+}
+function sumByProduct(pid) {
+  const loaded = loadedTotals[pid] ? loadedTotals[pid].quantity : 0;
+  const added = addedItems.filter(a => a.product_id === pid).reduce((s, a) => s + a.quantity, 0);
+  return loaded + added;
+}
+function countByProduct(pid) {
+  const loaded = loadedTotals[pid] ? loadedTotals[pid].count : 0;
+  const added = addedItems.filter(a => a.product_id === pid).length;
+  return loaded + added;
+}
+function isNewProduct(pid) {
+  return newProducts.some(np => np.tempId === pid);
+}
+
+// ============ Tabs ============
+function setMode(m) {
+  mode = m;
+  tabInv.classList.toggle('active', m === 'inv');
+  tabNew.classList.toggle('active', m === 'new');
+  pageInv.classList.toggle('hidden', m !== 'inv');
+  pageNew.classList.toggle('hidden', m !== 'new');
+  haptic('soft');
+  updateMainButton();
+}
+tabInv.onclick = () => setMode('inv');
+tabNew.onclick = () => setMode('new');
+
+// ============ Inventory: search + render ============
+function renderResults() {
+  const q = searchEl.value.trim().toLowerCase();
+  resultsEl.innerHTML = '';
+
+  let list;
+  if (q.length > 0) {
+    list = PRODUCTS.filter(p => p.name.toLowerCase().includes(q));
+    searchHint.textContent = list.length === 0
+      ? 'Ничего не найдено'
+      : `Найдено: ${list.length}`;
+  } else {
+    // Без запроса: продукты с суммой или недавно добавленные новые.
+    list = PRODUCTS.filter(p => sumByProduct(p.id) > 0 || isNewProduct(p.id));
+    if (list.length === 0) {
+      searchHint.textContent = 'Начните вводить название продукта';
+      resultsEl.innerHTML = '<div class="empty">Введите часть названия в поле выше</div>';
+      return;
+    } else {
+      const loadedCount = Object.keys(loadedTotals).length;
+      searchHint.textContent = loadedCount > 0
+        ? `Уже учтено сегодня: ${loadedCount}. Введите запрос чтобы добавить ещё.`
+        : `В списке: ${list.length}. Введите запрос для поиска.`;
+    }
+  }
+
+  if (list.length === 0) {
+    resultsEl.innerHTML = '<div class="empty">Продукт не найден</div>';
+    return;
+  }
+
+  list.slice(0, 60).forEach(p => {
+    const sum = sumByProduct(p.id);
+    const cnt = countByProduct(p.id);
+    const isExp = expandedProductId === p.id;
+    const isNew = isNewProduct(p.id);
+
+    const el = document.createElement('div');
+    el.className = 'product'
+      + (sum > 0 ? ' with-sum' : '')
+      + (isNew && sum === 0 ? ' is-new' : '')
+      + (isExp ? ' expanded' : '');
+    el.innerHTML = `
+      <div class="row">
+        <div class="name"></div>
+        ${sum > 0 ? `<div class="sum">${fmt(sum)}${cnt > 1 ? ` · ${cnt} зап.` : ''}</div>` : ''}
+      </div>
+      <div class="expand">
+        <input type="number" step="0.01" min="0" max="9999" placeholder="Количество" inputmode="decimal">
+        <button class="add">Добавить</button>
+      </div>
+    `;
+    const nameEl = el.querySelector('.name');
+    nameEl.textContent = p.name;
+    if (isNew) {
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = 'NEW';
+      nameEl.appendChild(badge);
+    }
+    const input = el.querySelector('input');
+    const addBtn = el.querySelector('.add');
+
+    el.querySelector('.row').onclick = (e) => {
+      if (e.target === input || e.target === addBtn) return;
+      expandedProductId = isExp ? null : p.id;
+      haptic('light');
+      renderResults();
+      if (!isExp) {
+        setTimeout(() => {
+          const newEl = [...document.querySelectorAll('.product.expanded input')][0];
+          if (newEl) newEl.focus();
+        }, 0);
+      }
+    };
+
+    addBtn.onclick = (e) => {
+      e.stopPropagation();
+      const raw = (input.value || '').replace(',', '.').trim();
+      const q = parseFloat(raw);
+      if (!Number.isFinite(q) || q < 0 || q > 9999) {
+        hapticNotify('error');
+        tg.showAlert('Введите число от 0 до 9999');
+        return;
+      }
+      addedItems.push({product_id: p.id, name: p.name, quantity: q});
+      hapticNotify('success');
+      input.value = '';
+      searchEl.value = '';
+      expandedProductId = null;
+      renderResults();
+      renderAdded();
+      updateMainButton();
+    };
+
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addBtn.click(); }
+    };
+
+    resultsEl.appendChild(el);
+  });
+}
+
+function renderAdded() {
+  if (addedItems.length === 0) {
+    addedSect.style.display = 'none';
+    counterEl.textContent = '';
+    return;
+  }
+  addedSect.style.display = 'block';
+  addedTitle.textContent = `Добавлено · ${addedItems.length}`;
+  addedList.innerHTML = '';
+
+  addedItems.forEach((item, idx) => {
+    const row = document.createElement('div');
+    row.className = 'added-item';
+    row.innerHTML = `
+      <div class="name"></div>
+      <div class="qty"></div>
+      <button class="del" aria-label="Удалить">×</button>
+    `;
+    row.querySelector('.name').textContent = item.name;
+    row.querySelector('.qty').textContent = fmt(item.quantity);
+    row.querySelector('.del').onclick = () => {
+      addedItems.splice(idx, 1);
+      haptic('medium');
+      renderAdded();
+      renderResults();
+      updateMainButton();
+    };
+    addedList.appendChild(row);
+  });
+
+  const unique = new Set(addedItems.map(a => a.product_id)).size;
+  counterEl.textContent = `${addedItems.length} ${plural(addedItems.length, 'запись','записи','записей')} по ${unique} ${plural(unique, 'продукту','продуктам','продуктам')}`;
+}
+
+function plural(n, one, few, many) {
+  const m = Math.abs(n) % 100, m1 = m % 10;
+  if (m > 10 && m < 20) return many;
+  if (m1 > 1 && m1 < 5) return few;
+  if (m1 === 1) return one;
+  return many;
+}
+
+clearBtn.onclick = () => {
+  if (addedItems.length === 0) return;
+  tg.showConfirm('Очистить весь список?', ok => {
+    if (!ok) return;
+    addedItems = [];
+    hapticNotify('warning');
+    renderAdded();
+    renderResults();
+    updateMainButton();
+  });
+};
+
+searchEl.addEventListener('input', () => {
+  expandedProductId = null;
+  renderResults();
+});
+
+// ============ Add new product tab ============
+document.querySelectorAll('.chip').forEach(c => {
+  c.onclick = () => {
+    newUnit.value = c.dataset.unit;
+    document.querySelectorAll('.chip').forEach(x => x.classList.toggle('active', x === c));
+    haptic('light');
+  };
+});
+
+addNewBtn.onclick = () => {
+  const name = newName.value.trim();
+  const unit = newUnit.value.trim();
+  if (name.length < 2 || name.length > 80) {
+    hapticNotify('error');
+    tg.showAlert('Название: от 2 до 80 символов');
+    return;
+  }
+  if (unit.length < 1 || unit.length > 20) {
+    hapticNotify('error');
+    tg.showAlert('Укажите единицу измерения');
+    return;
+  }
+  const dup = PRODUCTS.find(p => p.name.toLowerCase() === name.toLowerCase());
+  if (dup) {
+    hapticNotify('warning');
+    tg.showAlert(`«${dup.name}» уже есть в списке`);
+    setMode('inv');
+    searchEl.value = dup.name;
+    expandedProductId = dup.id;
+    renderResults();
+    return;
+  }
+  const tempId = nextTempId--;
+  PRODUCTS.push({id: tempId, name, unit});
+  newProducts.push({tempId, name, unit});
+  hapticNotify('success');
+
+  newName.value = '';
+  newUnit.value = '';
+  document.querySelectorAll('.chip.active').forEach(c => c.classList.remove('active'));
+
+  // Переходим на вкладку инвентаризации — продукт уже виден, раскрыт для ввода.
+  setMode('inv');
+  searchEl.value = '';
+  expandedProductId = tempId;
+  renderResults();
+  renderAdded();
+  updateMainButton();
+  setTimeout(() => {
+    const el = document.querySelector('.product.expanded input');
+    if (el) el.focus();
+  }, 60);
+};
+
+// ============ Telegram MainButton ============
+function updateMainButton() {
+  const mb = tg.MainButton;
+  if (mode !== 'inv') {
+    mb.hide();
+    return;
+  }
+  if (addedItems.length === 0 && newProducts.length === 0) {
+    mb.hide();
+    return;
+  }
+  const parts = [];
+  if (addedItems.length > 0) {
+    parts.push(`${addedItems.length} ${plural(addedItems.length,'запись','записи','записей')}`);
+  }
+  if (newProducts.length > 0) {
+    parts.push(`${newProducts.length} нов.`);
+  }
+  mb.setText(`✅ Завершить · ${parts.join(' + ')}`);
+  mb.show();
+  mb.enable();
+}
+
+tg.MainButton.onClick(() => {
+  if (mode !== 'inv') return;
+  if (addedItems.length === 0 && newProducts.length === 0) return;
+  const partsMsg = [];
+  if (addedItems.length > 0) {
+    partsMsg.push(`${addedItems.length} ${plural(addedItems.length,'запись','записи','записей')}`);
+  }
+  if (newProducts.length > 0) {
+    partsMsg.push(`${newProducts.length} новых продуктов`);
+  }
+  tg.showConfirm(`Отправить: ${partsMsg.join(', ')}?`, ok => {
+    if (!ok) return;
+    const payload = {
+      action: 'inventory',
+      items: addedItems,
+      new_products: newProducts,
+    };
+    tg.sendData(JSON.stringify(payload));
+    tg.close();
+  });
+});
+
+// ============ Init ============
+renderResults();
+renderAdded();
+updateMainButton();
+searchEl.focus();
+</script>
+</body>
+</html>
