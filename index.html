@@ -241,11 +241,13 @@ const FALLBACK_PRODUCT_NAMES = [
   "Шпинат","Шрирача","Яйцо"
 ];
 
-// ============ Разбор URL hash ============
-// Бот пакует в hash base64(url-safe) от JSON: {c: [[id,name,unit],...], t: [[pid,qty,cnt],...]}
-function parseHash() {
+// ============ Разбор данных из URL ============
+// Бот кладёт в ?d=<base64(url-safe)> от JSON: {c: [[id,name,unit],...], t: [[pid,qty,cnt],...]}
+// Fragment (#) не используется — Telegram Web Apps его перезаписывают tgWebAppData'ой.
+function parsePayload() {
   try {
-    let raw = (window.location.hash || '').replace(/^#/, '');
+    const params = new URLSearchParams(window.location.search || '');
+    let raw = params.get('d') || '';
     if (!raw) return {c: null, t: []};
     let b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
     while (b64.length % 4) b64 += '=';
@@ -256,7 +258,7 @@ function parseHash() {
     return {c: null, t: []};
   }
 }
-const _parsed = parseHash();
+const _parsed = parsePayload();
 
 // ============ Каталог + prefill ============
 let PRODUCTS;
@@ -266,11 +268,11 @@ if (Array.isArray(_parsed.c) && _parsed.c.length > 0) {
   PRODUCTS = FALLBACK_PRODUCT_NAMES.map((name, i) => ({id: i + 1, name, unit: 'кг/шт'}));
 }
 
-// Показываем маркер: v2 + число продуктов из hash (0 = fallback).
+// Маркер: v3 + число продуктов из query (0 = fallback).
 try {
   const vt = document.getElementById('version-tag');
   const src = Array.isArray(_parsed.c) ? _parsed.c.length : 0;
-  vt.textContent = `v2 · ${src || 'fb'} prod`;
+  vt.textContent = `v3 · ${src || 'fb'} prod`;
 } catch (_) {}
 
 const loadedTotals = {}; // {pid: {quantity, count}}
