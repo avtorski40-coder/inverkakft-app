@@ -17,6 +17,7 @@
     --section-bg: var(--tg-theme-section-bg-color, #ffffff);
     --section-header: var(--tg-theme-section-header-text-color, #6d6d72);
     --destructive: var(--tg-theme-destructive-text-color, #d9534f);
+    --accent: #34a853;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -69,8 +70,15 @@
   }
   .product:active { opacity: 0.7; }
   .product.with-sum { border-left: 3px solid var(--btn); padding-left: 9px; }
+  .product.is-new { border-left: 3px solid var(--accent); padding-left: 9px; }
   .product .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .product .name { flex: 1; font-weight: 500; }
+  .product .badge {
+    display: inline-block; margin-left: 6px; padding: 1px 6px;
+    background: var(--accent); color: #fff; font-size: 10px;
+    font-weight: 700; border-radius: 6px; letter-spacing: 0.5px;
+    vertical-align: middle;
+  }
   .product .sum { color: var(--btn); font-weight: 600; font-size: 14px; white-space: nowrap; }
   .product .expand { display: none; margin-top: 10px; }
   .product.expanded { background: var(--bg); box-shadow: inset 0 0 0 1px var(--btn); }
@@ -88,6 +96,7 @@
   button:disabled { opacity: 0.4; }
   button.secondary { background: var(--secondary-bg); color: var(--text); }
   button.danger { background: transparent; color: var(--destructive); }
+  button.wide { width: 100%; }
 
   /* Added */
   .section {
@@ -115,7 +124,7 @@
     padding: 4px 10px; font-size: 22px; line-height: 1; font-weight: 400;
   }
 
-  /* Suggest product tab */
+  /* Add-product tab */
   .form-group { margin-bottom: 14px; }
   .form-group label {
     display: block; margin-bottom: 6px; font-size: 13px;
@@ -164,7 +173,7 @@
     <div class="footer-counter" id="counter"></div>
   </div>
 
-  <!-- ============ Suggest new product ============ -->
+  <!-- ============ Add new product ============ -->
   <div id="page-new" class="hidden">
     <div class="form-group">
       <label>Название продукта</label>
@@ -182,8 +191,10 @@
         <div class="chip" data-unit="упак">упак</div>
       </div>
     </div>
+    <button id="add-new-btn" class="wide">➕ Добавить в список</button>
     <div class="empty" style="text-align:left;">
-      Заявка отправится менеджеру. Когда он одобрит — продукт появится в общем списке.
+      Продукт сразу появится в вашем списке — можно вернуться и посчитать.
+      Менеджеру уйдёт уведомление после завершения инвентаризации.
     </div>
   </div>
 </div>
@@ -196,9 +207,9 @@ tg.ready();
 tg.expand();
 tg.enableClosingConfirmation();
 
-// ============ Каталог продуктов ============
-// 87 продуктов в порядке config.py — id = index + 1 (соответствует автоинкременту в БД).
-const PRODUCT_NAMES = [
+// ============ Fallback каталог ============
+// Используется если бот не передал каталог (например открыли mini_app напрямую).
+const FALLBACK_PRODUCT_NAMES = [
   "Анчоусы","Апельсин","Варенье","Ветчина Алексеевская","Вырезка Говяжья",
   "Грибы","Гуанчале","Диженская Горчица","Зеленый Лук","Кедровые Орехи",
   "Кинза","Красный лук","Крахмал Картофельный","Креветки","Крупа Гречневая",
@@ -221,7 +232,42 @@ const PRODUCT_NAMES = [
   "Фасоль Консервированная","Фасоль стручковая","Чеснок","Чиабатта",
   "Шпинат","Шрирача","Яйцо"
 ];
-const PRODUCTS = PRODUCT_NAMES.map((name, i) => ({ id: i + 1, name }));
+
+// ============ Разбор URL hash ============
+// Бот пакует в hash base64(url-safe) от JSON: {c: [[id,name,unit],...], t: [[pid,qty,cnt],...]}
+function parseHash() {
+  try {
+    let raw = (window.location.hash || '').replace(/^#/, '');
+    if (!raw) return {c: null, t: []};
+    let b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const text = new TextDecoder('utf-8').decode(bytes);
+    return JSON.parse(text);
+  } catch (e) {
+    return {c: null, t: []};
+  }
+}
+const _parsed = parseHash();
+
+// ============ Каталог + prefill ============
+let PRODUCTS;
+if (Array.isArray(_parsed.c) && _parsed.c.length > 0) {
+  PRODUCTS = _parsed.c.map(([id, name, unit]) => ({id, name, unit: unit || 'кг/шт'}));
+} else {
+  PRODUCTS = FALLBACK_PRODUCT_NAMES.map((name, i) => ({id: i + 1, name, unit: 'кг/шт'}));
+}
+
+const loadedTotals = {}; // {pid: {quantity, count}}
+(_parsed.t || []).forEach(entry => {
+  if (!Array.isArray(entry) || entry.length < 2) return;
+  const pid = parseInt(entry[0], 10);
+  const qty = parseFloat(entry[1]);
+  const cnt = parseInt(entry[2] || '1', 10);
+  if (Number.isInteger(pid) && Number.isFinite(qty)) {
+    loadedTotals[pid] = {quantity: qty, count: cnt};
+  }
+});
 
 // ============ DOM refs ============
 const tabInv      = document.getElementById('tab-inv');
@@ -238,11 +284,14 @@ const counterEl   = document.getElementById('counter');
 const clearBtn    = document.getElementById('clear-btn');
 const newName     = document.getElementById('new-name');
 const newUnit     = document.getElementById('new-unit');
+const addNewBtn   = document.getElementById('add-new-btn');
 
 // ============ State ============
-let mode = 'inv'; // 'inv' | 'new'
+let mode = 'inv';
 let expandedProductId = null;
-let addedItems = []; // [{product_id, name, quantity}]
+let addedItems = [];       // [{product_id, name, quantity}]
+let newProducts = [];      // [{tempId, name, unit}]
+let nextTempId = -1;
 
 // ============ Helpers ============
 function fmt(n) {
@@ -257,10 +306,17 @@ function hapticNotify(kind = 'success') {
   try { tg.HapticFeedback.notificationOccurred(kind); } catch (_) {}
 }
 function sumByProduct(pid) {
-  return addedItems.filter(a => a.product_id === pid).reduce((s, a) => s + a.quantity, 0);
+  const loaded = loadedTotals[pid] ? loadedTotals[pid].quantity : 0;
+  const added = addedItems.filter(a => a.product_id === pid).reduce((s, a) => s + a.quantity, 0);
+  return loaded + added;
 }
 function countByProduct(pid) {
-  return addedItems.filter(a => a.product_id === pid).length;
+  const loaded = loadedTotals[pid] ? loadedTotals[pid].count : 0;
+  const added = addedItems.filter(a => a.product_id === pid).length;
+  return loaded + added;
+}
+function isNewProduct(pid) {
+  return newProducts.some(np => np.tempId === pid);
 }
 
 // ============ Tabs ============
@@ -288,14 +344,17 @@ function renderResults() {
       ? 'Ничего не найдено'
       : `Найдено: ${list.length}`;
   } else {
-    // Без запроса: показываем добавленные ранее в этой сессии + подсказку
-    list = PRODUCTS.filter(p => sumByProduct(p.id) > 0);
+    // Без запроса: продукты с суммой или недавно добавленные новые.
+    list = PRODUCTS.filter(p => sumByProduct(p.id) > 0 || isNewProduct(p.id));
     if (list.length === 0) {
       searchHint.textContent = 'Начните вводить название продукта';
       resultsEl.innerHTML = '<div class="empty">Введите часть названия в поле выше</div>';
       return;
     } else {
-      searchHint.textContent = `Уже добавленные (${list.length}). Введите запрос для поиска новых.`;
+      const loadedCount = Object.keys(loadedTotals).length;
+      searchHint.textContent = loadedCount > 0
+        ? `Уже учтено сегодня: ${loadedCount}. Введите запрос чтобы добавить ещё.`
+        : `В списке: ${list.length}. Введите запрос для поиска.`;
     }
   }
 
@@ -308,9 +367,13 @@ function renderResults() {
     const sum = sumByProduct(p.id);
     const cnt = countByProduct(p.id);
     const isExp = expandedProductId === p.id;
+    const isNew = isNewProduct(p.id);
 
     const el = document.createElement('div');
-    el.className = 'product' + (sum > 0 ? ' with-sum' : '') + (isExp ? ' expanded' : '');
+    el.className = 'product'
+      + (sum > 0 ? ' with-sum' : '')
+      + (isNew && sum === 0 ? ' is-new' : '')
+      + (isExp ? ' expanded' : '');
     el.innerHTML = `
       <div class="row">
         <div class="name"></div>
@@ -321,17 +384,22 @@ function renderResults() {
         <button class="add">Добавить</button>
       </div>
     `;
-    el.querySelector('.name').textContent = p.name;
+    const nameEl = el.querySelector('.name');
+    nameEl.textContent = p.name;
+    if (isNew) {
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = 'NEW';
+      nameEl.appendChild(badge);
+    }
     const input = el.querySelector('input');
     const addBtn = el.querySelector('.add');
 
     el.querySelector('.row').onclick = (e) => {
-      // Тап по строке раскрывает/сворачивает
       if (e.target === input || e.target === addBtn) return;
       expandedProductId = isExp ? null : p.id;
       haptic('light');
       renderResults();
-      // Сфокусируемся на инпуте после ре-рендера
       if (!isExp) {
         setTimeout(() => {
           const newEl = [...document.querySelectorAll('.product.expanded input')][0];
@@ -349,10 +417,10 @@ function renderResults() {
         tg.showAlert('Введите число от 0 до 9999');
         return;
       }
-      addedItems.push({ product_id: p.id, name: p.name, quantity: q });
+      addedItems.push({product_id: p.id, name: p.name, quantity: q});
       hapticNotify('success');
       input.value = '';
-      // Сворачиваем после успешного добавления, чтобы освободить экран
+      searchEl.value = '';
       expandedProductId = null;
       renderResults();
       renderAdded();
@@ -397,7 +465,6 @@ function renderAdded() {
     addedList.appendChild(row);
   });
 
-  // Итог по уникальным продуктам
   const unique = new Set(addedItems.map(a => a.product_id)).size;
   counterEl.textContent = `${addedItems.length} ${plural(addedItems.length, 'запись','записи','записей')} по ${unique} ${plural(unique, 'продукту','продуктам','продуктам')}`;
 }
@@ -427,59 +494,103 @@ searchEl.addEventListener('input', () => {
   renderResults();
 });
 
-// ============ Suggest product tab ============
+// ============ Add new product tab ============
 document.querySelectorAll('.chip').forEach(c => {
   c.onclick = () => {
     newUnit.value = c.dataset.unit;
     document.querySelectorAll('.chip').forEach(x => x.classList.toggle('active', x === c));
     haptic('light');
-    updateMainButton();
   };
 });
-newName.addEventListener('input', updateMainButton);
-newUnit.addEventListener('input', updateMainButton);
+
+addNewBtn.onclick = () => {
+  const name = newName.value.trim();
+  const unit = newUnit.value.trim();
+  if (name.length < 2 || name.length > 80) {
+    hapticNotify('error');
+    tg.showAlert('Название: от 2 до 80 символов');
+    return;
+  }
+  if (unit.length < 1 || unit.length > 20) {
+    hapticNotify('error');
+    tg.showAlert('Укажите единицу измерения');
+    return;
+  }
+  const dup = PRODUCTS.find(p => p.name.toLowerCase() === name.toLowerCase());
+  if (dup) {
+    hapticNotify('warning');
+    tg.showAlert(`«${dup.name}» уже есть в списке`);
+    setMode('inv');
+    searchEl.value = dup.name;
+    expandedProductId = dup.id;
+    renderResults();
+    return;
+  }
+  const tempId = nextTempId--;
+  PRODUCTS.push({id: tempId, name, unit});
+  newProducts.push({tempId, name, unit});
+  hapticNotify('success');
+
+  newName.value = '';
+  newUnit.value = '';
+  document.querySelectorAll('.chip.active').forEach(c => c.classList.remove('active'));
+
+  // Переходим на вкладку инвентаризации — продукт уже виден, раскрыт для ввода.
+  setMode('inv');
+  searchEl.value = '';
+  expandedProductId = tempId;
+  renderResults();
+  renderAdded();
+  updateMainButton();
+  setTimeout(() => {
+    const el = document.querySelector('.product.expanded input');
+    if (el) el.focus();
+  }, 60);
+};
 
 // ============ Telegram MainButton ============
 function updateMainButton() {
   const mb = tg.MainButton;
-  if (mode === 'inv') {
-    if (addedItems.length === 0) {
-      mb.hide();
-    } else {
-      mb.setText(`✅ Завершить · ${addedItems.length}`);
-      mb.show();
-      mb.enable();
-    }
-  } else {
-    // suggest mode
-    const ok = newName.value.trim().length >= 2 && newUnit.value.trim().length >= 1;
-    mb.setText('➕ Отправить менеджеру');
-    mb.show();
-    if (ok) mb.enable(); else mb.disable();
+  if (mode !== 'inv') {
+    mb.hide();
+    return;
   }
+  if (addedItems.length === 0 && newProducts.length === 0) {
+    mb.hide();
+    return;
+  }
+  const parts = [];
+  if (addedItems.length > 0) {
+    parts.push(`${addedItems.length} ${plural(addedItems.length,'запись','записи','записей')}`);
+  }
+  if (newProducts.length > 0) {
+    parts.push(`${newProducts.length} нов.`);
+  }
+  mb.setText(`✅ Завершить · ${parts.join(' + ')}`);
+  mb.show();
+  mb.enable();
 }
 
 tg.MainButton.onClick(() => {
-  if (mode === 'inv') {
-    if (addedItems.length === 0) return;
-    tg.showConfirm(`Отправить ${addedItems.length} ${plural(addedItems.length,'запись','записи','записей')}?`, ok => {
-      if (!ok) return;
-      const payload = { action: 'inventory', items: addedItems };
-      tg.sendData(JSON.stringify(payload));
-      tg.close();
-    });
-  } else {
-    const name = newName.value.trim();
-    const unit = newUnit.value.trim();
-    if (name.length < 2 || unit.length < 1) {
-      hapticNotify('error');
-      tg.showAlert('Заполните название и единицу');
-      return;
-    }
-    const payload = { action: 'suggest_product', name, unit };
+  if (mode !== 'inv') return;
+  if (addedItems.length === 0 && newProducts.length === 0) return;
+  const partsMsg = [];
+  if (addedItems.length > 0) {
+    partsMsg.push(`${addedItems.length} ${plural(addedItems.length,'запись','записи','записей')}`);
+  }
+  if (newProducts.length > 0) {
+    partsMsg.push(`${newProducts.length} новых продуктов`);
+  }
+  tg.showConfirm(`Отправить: ${partsMsg.join(', ')}?`, ok => {
+    if (!ok) return;
+    const payload = {
+      action: 'inventory',
+      items: addedItems,
+      new_products: newProducts,
+    };
     tg.sendData(JSON.stringify(payload));
     tg.close();
-  }
+  });
 });
 
 // ============ Init ============
