@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Управление</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --text: var(--tg-theme-text-color, #000000);
+    --hint: var(--tg-theme-hint-color, #999999);
+    --btn: var(--tg-theme-button-color, #2481cc);
+    --btn-text: var(--tg-theme-button-text-color, #ffffff);
+    --secondary-bg: var(--tg-theme-secondary-bg-color, #f1f1f1);
+    --destructive: var(--tg-theme-destructive-text-color, #d9534f);
+    --accent: #34a853;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    font-size: 16px; line-height: 1.4; overscroll-behavior: contain;
+  }
+  .container { padding: 12px; padding-bottom: 24px; max-width: 720px; margin: 0 auto; }
+
+  input[type="text"], input[type="number"] {
+    width: 100%; padding: 12px; border: 1px solid transparent; border-radius: 10px;
+    background: var(--secondary-bg); color: var(--text); font-size: 16px; outline: none;
+  }
+  input:focus { border-color: var(--btn); }
+  button {
+    padding: 12px 16px; border: none; border-radius: 10px;
+    background: var(--btn); color: var(--btn-text); font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  button.secondary { background: var(--secondary-bg); color: var(--text); }
+  button.danger { background: transparent; color: var(--destructive); }
+  .hidden { display: none !important; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; background: var(--secondary-bg); padding: 4px; border-radius: 10px; position: sticky; top: 0; z-index: 20; }
+  .tab { flex: 1; padding: 10px 8px; text-align: center; border-radius: 8px; font-size: 14px; font-weight: 600; color: var(--hint); cursor: pointer; }
+  .tab.active { background: var(--bg); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+
+  /* Add product */
+  .add-card { background: var(--secondary-bg); border-radius: 12px; padding: 12px; margin-bottom: 16px; }
+  .add-card .title { font-size: 13px; font-weight: 700; color: var(--hint); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+  .add-card input { background: var(--bg); margin-bottom: 8px; }
+  .add-row { display: flex; gap: 8px; }
+  .add-row input { flex: 1; margin-bottom: 0; }
+  .add-row button { white-space: nowrap; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { padding: 6px 12px; background: var(--bg); color: var(--text); border-radius: 16px; font-size: 13px; cursor: pointer; border: 1px solid transparent; }
+  .chip.active { background: var(--btn); color: var(--btn-text); }
+
+  .search-box { padding: 4px 0 8px; }
+
+  /* Product / session cards */
+  .product, .session, .prod-in-sess {
+    padding: 12px; margin-bottom: 6px; background: var(--secondary-bg); border-radius: 10px;
+  }
+  .product.off { opacity: .7; }
+  .product.dirty, .session.dirty { border-left: 3px solid var(--btn); padding-left: 9px; }
+  .product.is-new { border-left: 3px solid var(--accent); padding-left: 9px; }
+  .row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .pname { flex: 1; font-weight: 500; }
+  .punit { color: var(--hint); font-size: 13px; white-space: nowrap; }
+  .badge { display: inline-block; margin-left: 6px; padding: 1px 6px; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; border-radius: 6px; letter-spacing: .5px; vertical-align: middle; }
+  .actions { display: none; margin-top: 10px; flex-direction: column; gap: 8px; }
+  .product.expanded .actions, .session.expanded .expand { display: flex; }
+  .actions .btn-row { display: flex; gap: 8px; }
+  .actions .btn-row button { flex: 1; }
+  .product.expanded, .session.expanded { background: var(--bg); box-shadow: inset 0 0 0 1px var(--btn); }
+
+  /* Session inner */
+  .session .sub { color: var(--hint); font-size: 13px; white-space: nowrap; }
+  .session .expand { display: none; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .prod-in-sess { background: var(--secondary-bg); margin-bottom: 4px; }
+  .prod-in-sess.open { box-shadow: inset 0 0 0 1px var(--btn); background: var(--bg); }
+  .prod-total { color: var(--btn); font-weight: 600; font-size: 14px; white-space: nowrap; }
+  .recs { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .rec { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--secondary-bg); border-radius: 8px; }
+  .rec.editing { box-shadow: inset 0 0 0 1px var(--btn); }
+  .rec .rqty { flex: 1; font-variant-numeric: tabular-nums; font-weight: 600; cursor: pointer; }
+  .rec .rqty-edit { flex: 1; padding: 8px; font-size: 15px; }
+  .rec .rsave { background: transparent; color: var(--btn); padding: 4px 10px; font-size: 20px; font-weight: 700; }
+  .rec .rdel { background: transparent; color: var(--destructive); padding: 4px 10px; font-size: 22px; }
+  .addqty { display: flex; gap: 8px; margin-top: 6px; }
+  .addqty input { flex: 1; }
+  .sess-search-res { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; max-height: 240px; overflow-y: auto; }
+  .sess-search-res .r { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--secondary-bg); border-radius: 8px; }
+  .sess-search-res .r .nm { flex: 1; }
+  .sess-search-res .r input { width: 90px; }
+
+  .empty { color: var(--hint); padding: 24px 12px; text-align: center; font-size: 14px; }
+  .footer { padding: 10px 4px; text-align: center; color: var(--hint); font-size: 13px; }
+  .footer .undo { display: inline-block; margin-top: 4px; background: transparent; color: var(--destructive); font-size: 13px; padding: 4px 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="tabs">
+    <div class="tab active" id="tab-products">🗂 Продукты</div>
+    <div class="tab" id="tab-sessions">🗑 Сессии</div>
+  </div>
+
+  <!-- ===== Продукты ===== -->
+  <div id="page-products">
+    <div class="add-card">
+      <div class="title">➕ Новый продукт</div>
+      <input id="add-name" type="text" placeholder="Название" maxlength="80" autocomplete="off">
+      <div class="add-row">
+        <input id="add-unit" type="text" placeholder="Единица" maxlength="20" autocomplete="off">
+        <button id="add-btn">Добавить</button>
+      </div>
+      <div class="chips" id="unit-chips">
+        <span class="chip" data-u="кг/г">кг/г</span>
+        <span class="chip" data-u="шт/упак">шт/упак</span>
+        <span class="chip" data-u="кг">кг</span>
+        <span class="chip" data-u="шт">шт</span>
+        <span class="chip" data-u="л">л</span>
+      </div>
+    </div>
+    <div class="search-box"><input id="search" type="text" placeholder="🔎 Поиск продукта..." autocomplete="off"></div>
+    <div id="list-products"></div>
+  </div>
+
+  <!-- ===== Сессии ===== -->
+  <div id="page-sessions" class="hidden">
+    <div class="chips" id="date-chips"></div>
+    <div id="list-sessions"></div>
+  </div>
+
+  <div class="footer" id="footer"></div>
+</div>
+
+<script>
+'use strict';
+
+const tg = window.Telegram.WebApp;
+tg.ready(); tg.expand();
+try { tg.enableClosingConfirmation(); } catch (_) {}
+
+const RU_MONTHS = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+function ruDate(iso) { try { const [y,m,d] = iso.split('-'); return `${+d} ${RU_MONTHS[+m-1]}`; } catch (_) { return iso; } }
+function fmt(n) { if (!Number.isFinite(n)) return '0'; if (Number.isInteger(n)) return String(n); return parseFloat(n.toFixed(3)).toString(); }
+function haptic(k = 'light') { try { tg.HapticFeedback.impactOccurred(k); } catch (_) {} }
+function notify(k = 'success') { try { tg.HapticFeedback.notificationOccurred(k); } catch (_) {} }
+function parseQty(raw) {
+  const s = (raw || '').replace(',', '.').trim();
+  if (!/^\d+(?:\.\d+)?$/.test(s)) return null;
+  const v = parseFloat(s);
+  if (!Number.isFinite(v) || v < 0 || v > 9999) return null;
+  return v;
+}
+
+// Диалоги: нативные Telegram-окна (showConfirm/showAlert) появились только в
+// версии 6.2. В старых клиентах и вне Telegram (превью) их колбэк не срабатывает —
+// поэтому откатываемся на обычные окна браузера, чтобы кнопки работали везде.
+function verGE(v) { try { return tg.isVersionAtLeast && tg.isVersionAtLeast(v); } catch (_) { return false; } }
+function askConfirm(text, cb) {
+  if (verGE('6.2') && tg['showConfirm']) { try { tg['showConfirm'](text, cb); return; } catch (_) {} }
+  cb(window.confirm(text));
+}
+function alertMsg(text) {
+  if (verGE('6.2') && tg['showAlert']) { try { tg['showAlert'](text); return; } catch (_) {} }
+  window.alert(text);
+}
+
+// ============ Данные ============
+function parsePayload() {
+  try {
+    const raw = new URLSearchParams(window.location.search || '').get('d') || '';
+    if (!raw) return {};
+    let b64 = raw.replace(/-/g, '+').replace(/_/g, '/'); while (b64.length % 4) b64 += '=';
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder('utf-8').decode(bytes));
+  } catch (e) { return {}; }
+}
+const _parsed = parsePayload();
+
+// Продукты
+let products = (_parsed.p || []).map(([id, name, unit, active]) => ({
+  id, name: name || '', unit: unit || '', active: !!active,
+  _origName: name || '', _origActive: !!active, _isNew: false, _deleted: false,
+}));
+let nextTempId = -1;
+
+// Сессии
+let sessions = (_parsed.s || []).map(([id, cook_tg_id, cook_name, date]) => ({ id, cook_tg_id, cook_name: cook_name || ('id' + cook_tg_id), date }));
+let sItems = (_parsed.si || []).map(([id, session_id, product_id, qty]) => ({ id, session_id, product_id, quantity: qty, _orig: qty, _deleted: false }));
+let sNewItems = [];            // {session_id, product_id, quantity, _key}
+let sSessionDeletes = [];      // id сессий на удаление
+let nextSKey = 1;
+
+// ============ Состояние UI ============
+let tab = 'products';
+let expandedId = null;          // раскрытый продукт
+let expandedSession = null;     // раскрытая сессия
+let openProdKey = null;         // 'sid:pid' — раскрытые записи продукта в сессии
+let editingRecKey = null;       // редактируемая запись
+let addSearchSession = null;    // сессия, где открыт поиск для добавления продукта
+let selectedDate = null;
+
+// ============ DOM ============
+const pageProducts = document.getElementById('page-products');
+const pageSessions = document.getElementById('page-sessions');
+const listProducts = document.getElementById('list-products');
+const listSessions = document.getElementById('list-sessions');
+const dateChips = document.getElementById('date-chips');
+const footerEl = document.getElementById('footer');
+const searchEl = document.getElementById('search');
+const addName = document.getElementById('add-name');
+const addUnit = document.getElementById('add-unit');
+const addBtn = document.getElementById('add-btn');
+
+// ============ Общее ============
+function productInfo(pid) {
+  const p = products.find(x => x.id === pid);
+  return p || { id: pid, name: '#' + pid, unit: '' };
+}
+function unitSuffix(pid) { const u = productInfo(pid).unit; return u ? ' ' + u : ''; }
+
+function setTab(t) {
+  tab = t; editingRecKey = null;
+  document.getElementById('tab-products').classList.toggle('active', t === 'products');
+  document.getElementById('tab-sessions').classList.toggle('active', t === 'sessions');
+  pageProducts.classList.toggle('hidden', t !== 'products');
+  pageSessions.classList.toggle('hidden', t !== 'sessions');
+  haptic('soft');
+  render();
+}
+document.getElementById('tab-products').onclick = () => setTab('products');
+document.getElementById('tab-sessions').onclick = () => setTab('sessions');
+
+function render() {
+  if (tab === 'products') renderProducts();
+  else renderSessions();
+  renderFooter();
+  updateMainButton();
+}
+
+// ============ ПРОДУКТЫ ============
+function isProdDirty(p) {
+  if (p._isNew) return !p._deleted;
+  if (p._deleted) return true;
+  return p.name !== p._origName || p.active !== p._origActive;
+}
+function prodDirtyCount() { return products.filter(isProdDirty).length; }
+function byId(id) { return products.find(p => p.id === id); }
+
+function renderProducts() {
+  const q = searchEl.value.trim().toLowerCase();
+  const visible = products.filter(p => !p._deleted)
+    .filter(p => !q || p.name.toLowerCase().includes(q))
+    .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  listProducts.innerHTML = '';
+  if (visible.length === 0) { listProducts.innerHTML = '<div class="empty">' + (q ? 'Ничего не найдено' : 'Список пуст') + '</div>'; return; }
+  visible.slice(0, 200).forEach(p => listProducts.appendChild(buildProdRow(p)));
+}
+
+function buildProdRow(p) {
+  const isExp = expandedId === p.id;
+  const el = document.createElement('div');
+  el.className = 'product' + (!p.active ? ' off' : '') + (p._isNew ? ' is-new' : (isProdDirty(p) ? ' dirty' : '')) + (isExp ? ' expanded' : '');
+  const row = document.createElement('div'); row.className = 'row';
+  const dot = document.createElement('span'); dot.textContent = p.active ? '🟢' : '🔴';
+  const name = document.createElement('span'); name.className = 'pname'; name.textContent = p.name;
+  if (p._isNew) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = 'NEW'; name.appendChild(b); }
+  const unit = document.createElement('span'); unit.className = 'punit'; unit.textContent = p.unit;
+  row.appendChild(dot); row.appendChild(name); row.appendChild(unit);
+  row.onclick = () => { expandedId = isExp ? null : p.id; haptic(); render(); };
+  el.appendChild(row);
+  if (isExp) {
+    const actions = document.createElement('div'); actions.className = 'actions';
+    const nameInput = document.createElement('input'); nameInput.type = 'text'; nameInput.maxLength = 80; nameInput.value = p.name; nameInput.placeholder = 'Название';
+    nameInput.oninput = () => { const v = nameInput.value.trim(); if (v.length >= 1 && v.length <= 80) { p.name = v; updateMainButton(); renderFooter(); } };
+    actions.appendChild(nameInput);
+    const btnRow = document.createElement('div'); btnRow.className = 'btn-row';
+    const toggle = document.createElement('button'); toggle.className = 'secondary'; toggle.textContent = p.active ? '🔴 Выключить' : '🟢 Включить';
+    toggle.onclick = () => { p.active = !p.active; notify(); render(); };
+    const del = document.createElement('button'); del.className = 'danger'; del.textContent = '🗑 Удалить';
+    del.onclick = () => { if (p._isNew) products = products.filter(x => x !== p); else p._deleted = true; if (expandedId === p.id) expandedId = null; notify('warning'); render(); };
+    btnRow.appendChild(toggle); btnRow.appendChild(del); actions.appendChild(btnRow);
+    el.appendChild(actions);
+  }
+  return el;
+}
+
+document.querySelectorAll('#unit-chips .chip').forEach(c => {
+  c.onclick = () => { addUnit.value = c.dataset.u; document.querySelectorAll('#unit-chips .chip').forEach(x => x.classList.toggle('active', x === c)); haptic(); };
+});
+addBtn.onclick = () => {
+  const name = addName.value.trim(), unit = addUnit.value.trim();
+  if (name.length < 2 || name.length > 80) { notify('error'); alertMsg('Название: от 2 до 80 символов'); return; }
+  if (unit.length < 1 || unit.length > 20) { notify('error'); alertMsg('Укажите единицу измерения'); return; }
+  if (products.find(p => !p._deleted && p.name.toLowerCase() === name.toLowerCase())) { notify('warning'); alertMsg('Такой продукт уже есть'); return; }
+  products.unshift({ id: nextTempId--, name, unit, active: true, _origName: name, _origActive: true, _isNew: true, _deleted: false });
+  notify('success'); addName.value = ''; addUnit.value = '';
+  document.querySelectorAll('#unit-chips .chip.active').forEach(c => c.classList.remove('active'));
+  searchEl.value = ''; render();
+};
+searchEl.addEventListener('input', () => { expandedId = null; render(); });
+
+// ============ СЕССИИ ============
+function sessionDates() { return [...new Set(sessions.map(s => s.date))].sort().reverse(); }
+function sessionItems(sid) { return [...sItems.filter(i => i.session_id === sid && !i._deleted), ...sNewItems.filter(i => i.session_id === sid)]; }
+function recKey(it) { return it.id != null ? ('i' + it.id) : it._key; }
+function sessionProducts(sid) {
+  const map = new Map();
+  sessionItems(sid).forEach(it => {
+    if (!map.has(it.product_id)) map.set(it.product_id, { pid: it.product_id, total: 0, records: [] });
+    const g = map.get(it.product_id); g.total += it.quantity; g.records.push(it);
+  });
+  return [...map.values()].sort((a, b) => productInfo(a.pid).name.toLowerCase().localeCompare(productInfo(b.pid).name.toLowerCase()));
+}
+function sessChangeCount() {
+  const del = new Set(sSessionDeletes);
+  const edits = sItems.filter(i => !i._deleted && i.quantity !== i._orig && !del.has(i.session_id)).length;
+  const dels = sItems.filter(i => i._deleted && !del.has(i.session_id)).length;
+  const adds = sNewItems.filter(i => !del.has(i.session_id)).length;
+  return edits + dels + adds + sSessionDeletes.length;
+}
+
+function renderSessions() {
+  const dates = sessionDates();
+  if (selectedDate === null || !dates.includes(selectedDate)) selectedDate = dates[0] || null;
+
+  dateChips.innerHTML = '';
+  dates.forEach(d => {
+    const c = document.createElement('span'); c.className = 'chip' + (d === selectedDate ? ' active' : ''); c.textContent = ruDate(d);
+    c.onclick = () => { selectedDate = d; expandedSession = null; openProdKey = null; addSearchSession = null; haptic(); render(); };
+    dateChips.appendChild(c);
+  });
+
+  listSessions.innerHTML = '';
+  if (!selectedDate) { listSessions.innerHTML = '<div class="empty">Нет сохранённых инвентаризаций</div>'; return; }
+  const del = new Set(sSessionDeletes);
+  const list = sessions.filter(s => s.date === selectedDate && !del.has(s.id));
+  if (list.length === 0) { listSessions.innerHTML = '<div class="empty">Сессий за эту дату нет</div>'; return; }
+  list.forEach(s => listSessions.appendChild(buildSessionCard(s)));
+}
+
+function buildSessionCard(s) {
+  const isExp = expandedSession === s.id;
+  const prods = sessionProducts(s.id);
+  const recCount = sessionItems(s.id).length;
+  const el = document.createElement('div');
+  el.className = 'session' + (isExp ? ' expanded' : '');
+
+  const row = document.createElement('div'); row.className = 'row';
+  const name = document.createElement('span'); name.className = 'pname'; name.textContent = '🧑 ' + s.cook_name;
+  const sub = document.createElement('span'); sub.className = 'sub'; sub.textContent = `${prods.length} прод · ${recCount} зап.`;
+  row.appendChild(name); row.appendChild(sub);
+  row.onclick = () => { expandedSession = isExp ? null : s.id; openProdKey = null; addSearchSession = null; haptic(); render(); };
+  el.appendChild(row);
+
+  if (isExp) {
+    const exp = document.createElement('div'); exp.className = 'expand';
+    if (prods.length === 0) { const e = document.createElement('div'); e.className = 'empty'; e.textContent = '(пусто)'; exp.appendChild(e); }
+    prods.forEach(g => exp.appendChild(buildSessProduct(s.id, g)));
+
+    // Добавить продукт
+    if (addSearchSession === s.id) exp.appendChild(buildAddSearch(s.id));
+    else {
+      const addBtn2 = document.createElement('button'); addBtn2.className = 'secondary'; addBtn2.textContent = '➕ Добавить продукт';
+      addBtn2.onclick = () => { addSearchSession = s.id; openProdKey = null; render(); };
+      exp.appendChild(addBtn2);
+    }
+    // Удалить сессию
+    const delSess = document.createElement('button'); delSess.className = 'danger'; delSess.textContent = '🗑 Удалить всю сессию';
+    delSess.onclick = () => {
+      askConfirm(`Удалить сессию «${s.cook_name}» за ${ruDate(s.date)}?`, ok => {
+        if (!ok) return; sSessionDeletes.push(s.id); expandedSession = null; notify('warning'); render();
+      });
+    };
+    exp.appendChild(delSess);
+    el.appendChild(exp);
+  }
+  return el;
+}
+
+function buildSessProduct(sid, g) {
+  const key = sid + ':' + g.pid;
+  const isOpen = openProdKey === key;
+  const info = productInfo(g.pid);
+  const el = document.createElement('div'); el.className = 'prod-in-sess' + (isOpen ? ' open' : '');
+  const row = document.createElement('div'); row.className = 'row';
+  const nm = document.createElement('span'); nm.className = 'pname'; nm.textContent = info.name;
+  const tot = document.createElement('span'); tot.className = 'prod-total'; tot.textContent = fmt(g.total) + (info.unit ? ' ' + info.unit : '') + (g.records.length > 1 ? ` · ${g.records.length}` : '');
+  row.appendChild(nm); row.appendChild(tot);
+  row.onclick = () => { openProdKey = isOpen ? null : key; editingRecKey = null; haptic(); render(); };
+  el.appendChild(row);
+  if (isOpen) {
+    const recs = document.createElement('div'); recs.className = 'recs';
+    g.records.forEach(it => recs.appendChild(buildRecRow(it, g.pid)));
+    // добавить ещё количество
+    const addRow = document.createElement('div'); addRow.className = 'addqty';
+    const inp = document.createElement('input'); inp.type = 'number'; inp.step = '0.01'; inp.min = '0'; inp.max = '9999'; inp.inputMode = 'decimal'; inp.placeholder = 'Ещё количество';
+    inp.onkeydown = (e) => { if (['e','E','+','-'].includes(e.key)) e.preventDefault(); };
+    const b = document.createElement('button'); b.textContent = 'Добавить';
+    b.onclick = () => {
+      const v = parseQty(inp.value); if (v === null) { notify('error'); alertMsg('Введите число от 0 до 9999'); return; }
+      sNewItems.push({ session_id: sid, product_id: g.pid, quantity: v, _key: 's' + (nextSKey++) });
+      notify(); render();
+    };
+    addRow.appendChild(inp); addRow.appendChild(b); recs.appendChild(addRow);
+    el.appendChild(recs);
+  }
+  return el;
+}
+
+function buildRecRow(it, pid) {
+  const rec = document.createElement('div'); const key = recKey(it);
+  const editing = editingRecKey === key; rec.className = 'rec' + (editing ? ' editing' : '');
+  const del = document.createElement('button'); del.className = 'rdel'; del.textContent = '×';
+  del.onclick = () => { if (it.id != null) it._deleted = true; else sNewItems = sNewItems.filter(x => x !== it); if (editingRecKey === key) editingRecKey = null; notify('warning'); render(); };
+  if (editing) {
+    const inp = document.createElement('input'); inp.type = 'number'; inp.step = '0.01'; inp.min = '0'; inp.max = '9999'; inp.inputMode = 'decimal'; inp.className = 'rqty-edit'; inp.value = fmt(it.quantity);
+    inp.onkeydown = (e) => { if (['e','E','+','-'].includes(e.key)) e.preventDefault(); if (e.key === 'Enter') { e.preventDefault(); save(); } };
+    const sv = document.createElement('button'); sv.className = 'rsave'; sv.textContent = '✓';
+    const save = () => { const v = parseQty(inp.value); if (v === null) { notify('error'); alertMsg('Введите число от 0 до 9999'); return; } it.quantity = v; editingRecKey = null; notify(); render(); };
+    sv.onclick = save;
+    rec.appendChild(inp); rec.appendChild(sv); rec.appendChild(del);
+    setTimeout(() => { inp.focus(); inp.select(); }, 0);
+  } else {
+    const q = document.createElement('div'); q.className = 'rqty'; q.textContent = fmt(it.quantity) + unitSuffix(pid);
+    q.onclick = () => { editingRecKey = key; haptic(); render(); };
+    rec.appendChild(q); rec.appendChild(del);
+  }
+  return rec;
+}
+
+function buildAddSearch(sid) {
+  const wrap = document.createElement('div');
+  const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'Поиск продукта для добавления...';
+  const res = document.createElement('div'); res.className = 'sess-search-res';
+  const renderRes = () => {
+    const q = inp.value.trim().toLowerCase();
+    res.innerHTML = '';
+    if (!q) return;
+    products.filter(p => !p._deleted && p.active && p.name.toLowerCase().includes(q)).slice(0, 20).forEach(p => {
+      const r = document.createElement('div'); r.className = 'r';
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = p.name + (p.unit ? ` (${p.unit})` : '');
+      const qi = document.createElement('input'); qi.type = 'number'; qi.step = '0.01'; qi.min = '0'; qi.max = '9999'; qi.inputMode = 'decimal'; qi.placeholder = 'Кол-во';
+      qi.onkeydown = (e) => { if (['e','E','+','-'].includes(e.key)) e.preventDefault(); };
+      const b = document.createElement('button'); b.textContent = '＋';
+      b.onclick = () => {
+        const v = parseQty(qi.value); if (v === null) { notify('error'); alertMsg('Введите число от 0 до 9999'); return; }
+        sNewItems.push({ session_id: sid, product_id: p.id, quantity: v, _key: 's' + (nextSKey++) });
+        addSearchSession = null; notify('success'); render();
+      };
+      r.appendChild(nm); r.appendChild(qi); r.appendChild(b); res.appendChild(r);
+    });
+  };
+  inp.oninput = renderRes;
+  wrap.appendChild(inp); wrap.appendChild(res);
+  setTimeout(() => inp.focus(), 0);
+  return wrap;
+}
+
+// ============ Футер и сохранение ============
+function renderFooter() {
+  footerEl.innerHTML = '';
+  const total = prodDirtyCount() + sessChangeCount();
+  const info = document.createElement('div');
+  if (tab === 'products') {
+    const t = products.filter(p => !p._deleted).length, a = products.filter(p => !p._deleted && p.active).length;
+    info.textContent = `Продукты: ${t} · активных: ${a}` + (total ? ` · изменений: ${total}` : '');
+  } else {
+    info.textContent = (total ? `Изменений: ${total}` : 'Изменений нет');
+  }
+  footerEl.appendChild(info);
+  if (total) {
+    const undo = document.createElement('button'); undo.className = 'undo'; undo.textContent = 'Отменить изменения'; undo.onclick = revertAll;
+    footerEl.appendChild(undo);
+  }
+}
+
+function revertAll() {
+  askConfirm('Отменить все несохранённые изменения?', ok => {
+    if (!ok) return;
+    products = products.filter(p => !p._isNew).map(p => ({ ...p, name: p._origName, active: p._origActive, _deleted: false }));
+    sItems = sItems.map(i => ({ ...i, quantity: i._orig, _deleted: false }));
+    sNewItems = []; sSessionDeletes = [];
+    expandedId = null; expandedSession = null; openProdKey = null; editingRecKey = null; addSearchSession = null;
+    notify('warning'); render();
+  });
+}
+
+function collectProducts() {
+  return {
+    add: products.filter(p => p._isNew && !p._deleted).map(p => ({ name: p.name, unit: p.unit })),
+    rename: products.filter(p => !p._isNew && !p._deleted && p.name !== p._origName).map(p => ({ id: p.id, name: p.name })),
+    toggle: products.filter(p => !p._isNew && !p._deleted && p.active !== p._origActive).map(p => ({ id: p.id, active: p.active })),
+    delete: products.filter(p => !p._isNew && p._deleted).map(p => p.id),
+  };
+}
+function collectSessions() {
+  const del = new Set(sSessionDeletes);
+  return {
+    edits: sItems.filter(i => !i._deleted && i.quantity !== i._orig && !del.has(i.session_id)).map(i => ({ id: i.id, quantity: i.quantity })),
+    deletes: sItems.filter(i => i._deleted && !del.has(i.session_id)).map(i => i.id),
+    adds: sNewItems.filter(i => !del.has(i.session_id)).map(i => ({ session_id: i.session_id, product_id: i.product_id, quantity: i.quantity })),
+    session_deletes: sSessionDeletes.slice(),
+  };
+}
+
+function updateMainButton() {
+  const mb = tg.MainButton;
+  const n = prodDirtyCount() + sessChangeCount();
+  if (n === 0) { mb.hide(); return; }
+  mb.setText(`💾 Сохранить · ${n}`); mb.show(); mb.enable();
+}
+
+tg.MainButton.onClick(() => {
+  const n = prodDirtyCount() + sessChangeCount();
+  if (n === 0) return;
+  askConfirm(`Сохранить изменения (${n})?`, ok => {
+    if (!ok) return;
+    tg.sendData(JSON.stringify({ action: 'manage', products: collectProducts(), sessions: collectSessions() }));
+    tg.close();
+  });
+});
+
+// ============ Init ============
+render();
+</script>
+</body>
+</html>
