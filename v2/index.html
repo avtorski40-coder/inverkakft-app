@@ -495,14 +495,15 @@ function buildProductCard(p) {
       }
       addedItems.push({ product_id: p.id, name: p.name, quantity: val, _key: 'a' + (nextAddedKey++) });
       editingKey = null;
+      expandedProductId = null;   // свернуть карточку продукта
       hapticNotify('success');
+      searchEl.value = '';        // очистить строку поиска
       renderResults();
       updateMainButton();
-      // Остаёмся в карточке — фокус обратно в поле для быстрого повторного ввода.
-      setTimeout(() => {
-        const again = document.querySelector('.product.expanded .addrow input');
-        if (again) again.focus();
-      }, 0);
+      // Сразу возвращаемся к поиску — чтобы искать следующий продукт, не тратя
+      // время на переключение. Повторно посчитать тот же продукт можно, снова
+      // найдя его (он и так виден в списке уже посчитанных).
+      setTimeout(() => searchEl.focus(), 0);
     };
     addBtn.onclick = doAdd;
     input.onkeydown = (e) => {
