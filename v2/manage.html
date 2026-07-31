@@ -168,30 +168,42 @@ function alertMsg(text) {
 }
 
 // ============ Данные ============
-function parsePayload() {
+// Данные приходят в ?d=<base64url>. Если это gzip (магия 0x1f 0x8b) — распаковываем
+// через DecompressionStream; иначе это обычный JSON. Поэтому функция асинхронная.
+async function parsePayload() {
   try {
     const raw = new URLSearchParams(window.location.search || '').get('d') || '';
     if (!raw) return {};
     let b64 = raw.replace(/-/g, '+').replace(/_/g, '/'); while (b64.length % 4) b64 += '=';
     const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-    return JSON.parse(new TextDecoder('utf-8').decode(bytes));
+    let text;
+    if (bytes[0] === 0x1f && bytes[1] === 0x8b && typeof DecompressionStream !== 'undefined') {
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+      text = await new Response(stream).text();
+    } else {
+      text = new TextDecoder('utf-8').decode(bytes);
+    }
+    return JSON.parse(text);
   } catch (e) { return {}; }
 }
-const _parsed = parsePayload();
 
-// Продукты
-let products = (_parsed.p || []).map(([id, name, unit, active]) => ({
-  id, name: name || '', unit: unit || '', active: !!active,
-  _origName: name || '', _origActive: !!active, _isNew: false, _deleted: false,
-}));
+// Заполняются в init() после разбора данных.
+let products = [];
 let nextTempId = -1;
-
-// Сессии
-let sessions = (_parsed.s || []).map(([id, cook_tg_id, cook_name, date]) => ({ id, cook_tg_id, cook_name: cook_name || ('id' + cook_tg_id), date }));
-let sItems = (_parsed.si || []).map(([id, session_id, product_id, qty]) => ({ id, session_id, product_id, quantity: qty, _orig: qty, _deleted: false }));
+let sessions = [];
+let sItems = [];
 let sNewItems = [];            // {session_id, product_id, quantity, _key}
 let sSessionDeletes = [];      // id сессий на удаление
 let nextSKey = 1;
+
+function applyParsed(_parsed) {
+  products = (_parsed.p || []).map(([id, name, unit, active]) => ({
+    id, name: name || '', unit: unit || '', active: !!active,
+    _origName: name || '', _origActive: !!active, _isNew: false, _deleted: false,
+  }));
+  sessions = (_parsed.s || []).map(([id, cook_tg_id, cook_name, date]) => ({ id, cook_tg_id, cook_name: cook_name || ('id' + cook_tg_id), date }));
+  sItems = (_parsed.si || []).map(([id, session_id, product_id, qty]) => ({ id, session_id, product_id, quantity: qty, _orig: qty, _deleted: false }));
+}
 
 // ============ Состояние UI ============
 let tab = 'products';
@@ -524,7 +536,10 @@ tg.MainButton.onClick(() => {
 });
 
 // ============ Init ============
-render();
+(async () => {
+  applyParsed(await parsePayload());
+  render();
+})();
 </script>
 </body>
 </html>

@@ -231,54 +231,53 @@ const FALLBACK_PRODUCT_NAMES = [
 ];
 
 // ============ Разбор данных из URL ============
-// Бот кладёт в ?d=<base64(url-safe)> от JSON: {c: [[id,name,unit],...], t: [[pid,qty,cnt],...]}
+// Бот кладёт в ?d=<base64url> JSON: {c:[[id,name,unit],...], e:[[item_id,pid,qty,name,unit],...]}
+// При большом объёме данные сжаты gzip (магия 0x1f 0x8b) — распаковываем через
+// DecompressionStream; иначе это обычный JSON. Поэтому функция асинхронная.
 // Fragment (#) не используется — Telegram Web Apps его перезаписывают tgWebAppData'ой.
-function parsePayload() {
+async function parsePayload() {
   try {
-    const params = new URLSearchParams(window.location.search || '');
-    let raw = params.get('d') || '';
+    let raw = new URLSearchParams(window.location.search || '').get('d') || '';
     if (!raw) return {c: null, e: []};
     let b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
     while (b64.length % 4) b64 += '=';
     const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-    const text = new TextDecoder('utf-8').decode(bytes);
+    let text;
+    if (bytes[0] === 0x1f && bytes[1] === 0x8b && typeof DecompressionStream !== 'undefined') {
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+      text = await new Response(stream).text();
+    } else {
+      text = new TextDecoder('utf-8').decode(bytes);
+    }
     return JSON.parse(text);
   } catch (e) {
     return {c: null, e: []};
   }
 }
-const _parsed = parsePayload();
 
-// ============ Каталог + prefill ============
-let PRODUCTS;
-if (Array.isArray(_parsed.c) && _parsed.c.length > 0) {
-  PRODUCTS = _parsed.c.map(([id, name, unit]) => ({id, name, unit: unit || 'кг/шт'}));
-} else {
-  PRODUCTS = FALLBACK_PRODUCT_NAMES.map((name, i) => ({id: i + 1, name, unit: 'кг/шт'}));
-}
+// ============ Каталог + prefill (заполняется в init после разбора) ============
+let PRODUCTS = [];
+let existingItems = [];             // [{id, product_id, quantity, name, unit}] — записи с сервера
+const existingOriginalQty = {};     // {item_id: исходное qty} — чтобы понять, что изменилось
+let EXISTING_SNAPSHOT = [];         // снимок для «Отменить изменения»
 
-// Ранее внесённые записи повара за сегодня. Формат entry:
-//   [item_id, product_id, qty, name, unit]
-// Это записи с сервера — их можно редактировать/удалять, как и записи смены.
-let existingItems = [];
-const existingOriginalQty = {};  // {item_id: исходное qty} — чтобы понять, что изменилось
-(_parsed.e || []).forEach(entry => {
-  if (!Array.isArray(entry) || entry.length < 3) return;
-  const id = parseInt(entry[0], 10);
-  const pid = parseInt(entry[1], 10);
-  const qty = parseFloat(entry[2]);
-  if (!Number.isInteger(id) || !Number.isInteger(pid) || !Number.isFinite(qty)) return;
-  existingItems.push({
-    id,
-    product_id: pid,
-    quantity: qty,
-    name: entry[3] || '',
-    unit: entry[4] || '',
+function applyParsed(_parsed) {
+  if (Array.isArray(_parsed.c) && _parsed.c.length > 0) {
+    PRODUCTS = _parsed.c.map(([id, name, unit]) => ({id, name, unit: unit || 'кг/шт'}));
+  } else {
+    PRODUCTS = FALLBACK_PRODUCT_NAMES.map((name, i) => ({id: i + 1, name, unit: 'кг/шт'}));
+  }
+  (_parsed.e || []).forEach(entry => {
+    if (!Array.isArray(entry) || entry.length < 3) return;
+    const id = parseInt(entry[0], 10);
+    const pid = parseInt(entry[1], 10);
+    const qty = parseFloat(entry[2]);
+    if (!Number.isInteger(id) || !Number.isInteger(pid) || !Number.isFinite(qty)) return;
+    existingItems.push({ id, product_id: pid, quantity: qty, name: entry[3] || '', unit: entry[4] || '' });
+    existingOriginalQty[id] = qty;
   });
-  existingOriginalQty[id] = qty;
-});
-// Снимок для «Отменить изменения».
-const EXISTING_SNAPSHOT = existingItems.map(o => ({ ...o }));
+  EXISTING_SNAPSHOT = existingItems.map(o => ({ ...o }));
+}
 
 // ============ DOM refs ============
 const tabInv      = document.getElementById('tab-inv');
@@ -761,9 +760,12 @@ tg.MainButton.onClick(() => {
 });
 
 // ============ Init ============
-renderResults();
-updateMainButton();
-searchEl.focus();
+(async () => {
+  applyParsed(await parsePayload());
+  renderResults();
+  updateMainButton();
+  searchEl.focus();
+})();
 </script>
 </body>
 </html>
