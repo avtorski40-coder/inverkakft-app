@@ -15,6 +15,7 @@
     --secondary-bg: var(--tg-theme-secondary-bg-color, #f1f1f1);
     --destructive: var(--tg-theme-destructive-text-color, #d9534f);
     --accent: #34a853;
+    --warn: #e0982a;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -52,6 +53,12 @@
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .chip { padding: 6px 12px; background: var(--bg); color: var(--text); border-radius: 16px; font-size: 13px; cursor: pointer; border: 1px solid transparent; }
   .chip.active { background: var(--btn); color: var(--btn-text); }
+  .unit-choice { display: flex; gap: 8px; margin-bottom: 8px; }
+  .unit-opt { flex: 1; padding: 12px 10px; text-align: center; background: var(--bg); color: var(--text); border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; border: 2px solid transparent; }
+  .unit-opt .hint { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--hint); }
+  .unit-opt.active { background: var(--btn); color: var(--btn-text); border-color: var(--btn); }
+  .unit-opt.active .hint { color: var(--btn-text); opacity: 0.85; }
+  .add-card #add-btn { width: 100%; }
 
   .search-box { padding: 4px 0 8px; }
 
@@ -59,9 +66,8 @@
   .product, .session, .prod-in-sess {
     padding: 12px; margin-bottom: 6px; background: var(--secondary-bg); border-radius: 10px;
   }
-  .product.off { opacity: .7; }
-  .product.dirty, .session.dirty { border-left: 3px solid var(--btn); padding-left: 9px; }
-  .product.is-new { border-left: 3px solid var(--accent); padding-left: 9px; }
+  .product.off .pname { color: var(--hint); font-weight: 400; }
+  .product.dirty, .session.dirty, .product.is-new { border-left: 3px solid var(--warn); padding-left: 9px; }
   .row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
   .pname { flex: 1; font-weight: 500; }
   .punit { color: var(--hint); font-size: 13px; white-space: nowrap; }
@@ -109,17 +115,11 @@
     <div class="add-card">
       <div class="title">➕ Новый продукт</div>
       <input id="add-name" type="text" placeholder="Название" maxlength="80" autocomplete="off">
-      <div class="add-row">
-        <input id="add-unit" type="text" placeholder="Единица" maxlength="20" autocomplete="off">
-        <button id="add-btn">Добавить</button>
+      <div class="unit-choice">
+        <div class="unit-opt" data-unit="кг/г">⚖️ По весу<span class="hint">кг / г</span></div>
+        <div class="unit-opt" data-unit="шт/упак">🔢 Поштучно<span class="hint">шт / упак</span></div>
       </div>
-      <div class="chips" id="unit-chips">
-        <span class="chip" data-u="кг/г">кг/г</span>
-        <span class="chip" data-u="шт/упак">шт/упак</span>
-        <span class="chip" data-u="кг">кг</span>
-        <span class="chip" data-u="шт">шт</span>
-        <span class="chip" data-u="л">л</span>
-      </div>
+      <button id="add-btn">Добавить</button>
     </div>
     <div class="search-box"><input id="search" type="text" placeholder="🔎 Поиск продукта..." autocomplete="off"></div>
     <div id="list-products"></div>
@@ -223,7 +223,6 @@ const dateChips = document.getElementById('date-chips');
 const footerEl = document.getElementById('footer');
 const searchEl = document.getElementById('search');
 const addName = document.getElementById('add-name');
-const addUnit = document.getElementById('add-unit');
 const addBtn = document.getElementById('add-btn');
 
 // ============ Общее ============
@@ -299,17 +298,23 @@ function buildProdRow(p) {
   return el;
 }
 
-document.querySelectorAll('#unit-chips .chip').forEach(c => {
-  c.onclick = () => { addUnit.value = c.dataset.u; document.querySelectorAll('#unit-chips .chip').forEach(x => x.classList.toggle('active', x === c)); haptic(); };
+const ALLOWED_UNITS = ['кг/г', 'шт/упак'];
+let selectedNewUnit = null;
+document.querySelectorAll('#page-products .unit-opt').forEach(opt => {
+  opt.onclick = () => {
+    selectedNewUnit = opt.dataset.unit;
+    document.querySelectorAll('#page-products .unit-opt').forEach(x => x.classList.toggle('active', x === opt));
+    haptic();
+  };
 });
 addBtn.onclick = () => {
-  const name = addName.value.trim(), unit = addUnit.value.trim();
+  const name = addName.value.trim();
   if (name.length < 2 || name.length > 80) { notify('error'); alertMsg('Название: от 2 до 80 символов'); return; }
-  if (unit.length < 1 || unit.length > 20) { notify('error'); alertMsg('Укажите единицу измерения'); return; }
+  if (!ALLOWED_UNITS.includes(selectedNewUnit)) { notify('error'); alertMsg('Выберите единицу измерения'); return; }
   if (products.find(p => !p._deleted && p.name.toLowerCase() === name.toLowerCase())) { notify('warning'); alertMsg('Такой продукт уже есть'); return; }
-  products.unshift({ id: nextTempId--, name, unit, active: true, _origName: name, _origActive: true, _isNew: true, _deleted: false });
-  notify('success'); addName.value = ''; addUnit.value = '';
-  document.querySelectorAll('#unit-chips .chip.active').forEach(c => c.classList.remove('active'));
+  products.unshift({ id: nextTempId--, name, unit: selectedNewUnit, active: true, _origName: name, _origActive: true, _isNew: true, _deleted: false });
+  notify('success'); addName.value = ''; selectedNewUnit = null;
+  document.querySelectorAll('#page-products .unit-opt.active').forEach(o => o.classList.remove('active'));
   searchEl.value = ''; render();
 };
 searchEl.addEventListener('input', () => { expandedId = null; render(); });
