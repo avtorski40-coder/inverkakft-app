@@ -97,6 +97,9 @@
   .sess-search-res .r { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--secondary-bg); border-radius: 8px; }
   .sess-search-res .r .nm { flex: 1; }
   .sess-search-res .r input { width: 90px; }
+  .phase-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; background: var(--bg); color: var(--hint); font-size: 11px; font-weight: 600; border-radius: 6px; white-space: nowrap; }
+  .phase-choice { display: flex; gap: 6px; margin: 6px 0; }
+  .phase-choice .chip { flex: 1; text-align: center; }
 
   .empty { color: var(--hint); padding: 24px 12px; text-align: center; font-size: 14px; }
   .footer { padding: 10px 4px; text-align: center; color: var(--hint); font-size: 13px; }
@@ -196,13 +199,20 @@ let sNewItems = [];            // {session_id, product_id, quantity, _key}
 let sSessionDeletes = [];      // id сессий на удаление
 let nextSKey = 1;
 
+const PHASES = ['утро', 'приход', 'вечер'];
+const PHASE_LABELS = { 'утро': '🌅 Утро', 'приход': '📦 Приход', 'вечер': '🌙 Вечер' };
+
 function applyParsed(_parsed) {
   products = (_parsed.p || []).map(([id, name, unit, active]) => ({
     id, name: name || '', unit: unit || '', active: !!active,
     _origName: name || '', _origActive: !!active, _isNew: false, _deleted: false,
   }));
   sessions = (_parsed.s || []).map(([id, cook_tg_id, cook_name, date]) => ({ id, cook_tg_id, cook_name: cook_name || ('id' + cook_tg_id), date }));
-  sItems = (_parsed.si || []).map(([id, session_id, product_id, qty]) => ({ id, session_id, product_id, quantity: qty, _orig: qty, _deleted: false }));
+  sItems = (_parsed.si || []).map(([id, session_id, product_id, qty, phase]) => ({
+    id, session_id, product_id, quantity: qty,
+    phase: PHASES.includes(phase) ? phase : 'вечер',
+    _orig: qty, _deleted: false,
+  }));
 }
 
 // ============ Состояние UI ============
@@ -323,13 +333,19 @@ searchEl.addEventListener('input', () => { expandedId = null; render(); });
 function sessionDates() { return [...new Set(sessions.map(s => s.date))].sort().reverse(); }
 function sessionItems(sid) { return [...sItems.filter(i => i.session_id === sid && !i._deleted), ...sNewItems.filter(i => i.session_id === sid)]; }
 function recKey(it) { return it.id != null ? ('i' + it.id) : it._key; }
+// Группируем записи сессии по продукту И фазе замера — у одного продукта может
+// быть отдельная строка «Утро», «Приход», «Вечер» с разными суммами.
 function sessionProducts(sid) {
   const map = new Map();
   sessionItems(sid).forEach(it => {
-    if (!map.has(it.product_id)) map.set(it.product_id, { pid: it.product_id, total: 0, records: [] });
-    const g = map.get(it.product_id); g.total += it.quantity; g.records.push(it);
+    const key = it.product_id + '|' + it.phase;
+    if (!map.has(key)) map.set(key, { pid: it.product_id, phase: it.phase, total: 0, records: [] });
+    const g = map.get(key); g.total += it.quantity; g.records.push(it);
   });
-  return [...map.values()].sort((a, b) => productInfo(a.pid).name.toLowerCase().localeCompare(productInfo(b.pid).name.toLowerCase()));
+  return [...map.values()].sort((a, b) => {
+    const byName = productInfo(a.pid).name.toLowerCase().localeCompare(productInfo(b.pid).name.toLowerCase());
+    return byName !== 0 ? byName : PHASES.indexOf(a.phase) - PHASES.indexOf(b.phase);
+  });
 }
 function sessChangeCount() {
   const del = new Set(sSessionDeletes);
@@ -398,12 +414,14 @@ function buildSessionCard(s) {
 }
 
 function buildSessProduct(sid, g) {
-  const key = sid + ':' + g.pid;
+  const key = sid + ':' + g.pid + ':' + g.phase;
   const isOpen = openProdKey === key;
   const info = productInfo(g.pid);
   const el = document.createElement('div'); el.className = 'prod-in-sess' + (isOpen ? ' open' : '');
   const row = document.createElement('div'); row.className = 'row';
   const nm = document.createElement('span'); nm.className = 'pname'; nm.textContent = info.name;
+  const tag = document.createElement('span'); tag.className = 'phase-tag'; tag.textContent = PHASE_LABELS[g.phase] || g.phase;
+  nm.appendChild(tag);
   const tot = document.createElement('span'); tot.className = 'prod-total'; tot.textContent = fmt(g.total) + (info.unit ? ' ' + info.unit : '') + (g.records.length > 1 ? ` · ${g.records.length}` : '');
   row.appendChild(nm); row.appendChild(tot);
   row.onclick = () => { openProdKey = isOpen ? null : key; editingRecKey = null; haptic(); render(); };
@@ -411,14 +429,14 @@ function buildSessProduct(sid, g) {
   if (isOpen) {
     const recs = document.createElement('div'); recs.className = 'recs';
     g.records.forEach(it => recs.appendChild(buildRecRow(it, g.pid)));
-    // добавить ещё количество
+    // добавить ещё количество (в ту же фазу)
     const addRow = document.createElement('div'); addRow.className = 'addqty';
     const inp = document.createElement('input'); inp.type = 'number'; inp.step = '0.01'; inp.min = '0'; inp.max = '9999'; inp.inputMode = 'decimal'; inp.placeholder = 'Ещё количество';
     inp.onkeydown = (e) => { if (['e','E','+','-'].includes(e.key)) e.preventDefault(); };
     const b = document.createElement('button'); b.textContent = 'Добавить';
     b.onclick = () => {
       const v = parseQty(inp.value); if (v === null) { notify('error'); alertMsg('Введите число от 0 до 9999'); return; }
-      sNewItems.push({ session_id: sid, product_id: g.pid, quantity: v, _key: 's' + (nextSKey++) });
+      sNewItems.push({ session_id: sid, product_id: g.pid, quantity: v, phase: g.phase, _key: 's' + (nextSKey++) });
       notify(); render();
     };
     addRow.appendChild(inp); addRow.appendChild(b); recs.appendChild(addRow);
@@ -450,6 +468,23 @@ function buildRecRow(it, pid) {
 
 function buildAddSearch(sid) {
   const wrap = document.createElement('div');
+  let addPhase = 'утро';
+
+  const phaseChoice = document.createElement('div'); phaseChoice.className = 'phase-choice';
+  PHASES.forEach(ph => {
+    const chip = document.createElement('span');
+    chip.className = 'chip' + (ph === addPhase ? ' active' : '');
+    chip.textContent = PHASE_LABELS[ph];
+    chip.onclick = () => {
+      addPhase = ph;
+      phaseChoice.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      haptic();
+    };
+    phaseChoice.appendChild(chip);
+  });
+  wrap.appendChild(phaseChoice);
+
   const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'Поиск продукта для добавления...';
   const res = document.createElement('div'); res.className = 'sess-search-res';
   const renderRes = () => {
@@ -464,7 +499,7 @@ function buildAddSearch(sid) {
       const b = document.createElement('button'); b.textContent = '＋';
       b.onclick = () => {
         const v = parseQty(qi.value); if (v === null) { notify('error'); alertMsg('Введите число от 0 до 9999'); return; }
-        sNewItems.push({ session_id: sid, product_id: p.id, quantity: v, _key: 's' + (nextSKey++) });
+        sNewItems.push({ session_id: sid, product_id: p.id, quantity: v, phase: addPhase, _key: 's' + (nextSKey++) });
         addSearchSession = null; notify('success'); render();
       };
       r.appendChild(nm); r.appendChild(qi); r.appendChild(b); res.appendChild(r);
@@ -518,7 +553,7 @@ function collectSessions() {
   return {
     edits: sItems.filter(i => !i._deleted && i.quantity !== i._orig && !del.has(i.session_id)).map(i => ({ id: i.id, quantity: i.quantity })),
     deletes: sItems.filter(i => i._deleted && !del.has(i.session_id)).map(i => i.id),
-    adds: sNewItems.filter(i => !del.has(i.session_id)).map(i => ({ session_id: i.session_id, product_id: i.product_id, quantity: i.quantity })),
+    adds: sNewItems.filter(i => !del.has(i.session_id)).map(i => ({ session_id: i.session_id, product_id: i.product_id, quantity: i.quantity, phase: i.phase })),
     session_deletes: sSessionDeletes.slice(),
   };
 }

@@ -43,6 +43,18 @@
   }
   .tab.active { background: var(--bg); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
 
+  /* Phase tabs (утро/приход/вечер) */
+  .phase-tabs {
+    display: flex; gap: 6px; margin-bottom: 8px;
+    background: var(--secondary-bg); padding: 4px; border-radius: 10px;
+  }
+  .phase-tab {
+    flex: 1; padding: 8px 6px; text-align: center;
+    border-radius: 8px; font-size: 13px; font-weight: 600;
+    color: var(--hint); cursor: pointer; transition: all .15s;
+  }
+  .phase-tab.active { background: var(--btn); color: var(--btn-text); }
+
   /* Inputs */
   input[type="text"], input[type="number"] {
     width: 100%; padding: 12px;
@@ -166,6 +178,11 @@
   <!-- ============ Inventory ============ -->
   <div id="page-inv">
     <div class="search-box">
+      <div class="phase-tabs" id="phase-tabs">
+        <div class="phase-tab" data-phase="утро">🌅 Утро</div>
+        <div class="phase-tab" data-phase="приход">📦 Приход</div>
+        <div class="phase-tab" data-phase="вечер">🌙 Вечер</div>
+      </div>
       <input id="search" type="text" placeholder="🔎 Поиск продукта..." autocomplete="off">
       <div class="search-hint" id="search-hint">Начните вводить название или откройте любую категорию ниже</div>
     </div>
@@ -255,9 +272,13 @@ async function parsePayload() {
   }
 }
 
+// ============ Фазы замера ============
+const PHASES = ['утро', 'приход', 'вечер'];
+let currentPhase = 'утро';
+
 // ============ Каталог + prefill (заполняется в init после разбора) ============
 let PRODUCTS = [];
-let existingItems = [];             // [{id, product_id, quantity, name, unit}] — записи с сервера
+let existingItems = [];             // [{id, product_id, quantity, name, unit, phase}] — записи с сервера
 const existingOriginalQty = {};     // {item_id: исходное qty} — чтобы понять, что изменилось
 let EXISTING_SNAPSHOT = [];         // снимок для «Отменить изменения»
 
@@ -273,7 +294,8 @@ function applyParsed(_parsed) {
     const pid = parseInt(entry[1], 10);
     const qty = parseFloat(entry[2]);
     if (!Number.isInteger(id) || !Number.isInteger(pid) || !Number.isFinite(qty)) return;
-    existingItems.push({ id, product_id: pid, quantity: qty, name: entry[3] || '', unit: entry[4] || '' });
+    const phase = PHASES.includes(entry[5]) ? entry[5] : 'вечер';
+    existingItems.push({ id, product_id: pid, quantity: qty, name: entry[3] || '', unit: entry[4] || '', phase });
     existingOriginalQty[id] = qty;
   });
   EXISTING_SNAPSHOT = existingItems.map(o => ({ ...o }));
@@ -339,11 +361,11 @@ function recKey(o) {
 function isServerRecord(o) {
   return o.id != null;
 }
-// Все записи (серверные + смены) по продукту.
+// Все записи (серверные + смены) по продукту — только текущей фазы замера.
 function recordsByProduct(pid) {
   return [
-    ...existingItems.filter(o => o.product_id === pid),
-    ...addedItems.filter(o => o.product_id === pid),
+    ...existingItems.filter(o => o.product_id === pid && o.phase === currentPhase),
+    ...addedItems.filter(o => o.product_id === pid && o.phase === currentPhase),
   ];
 }
 function sumByProduct(pid) {
@@ -386,6 +408,20 @@ function setMode(m) {
 tabInv.onclick = () => setMode('inv');
 tabNew.onclick = () => setMode('new');
 
+// ============ Phase tabs ============
+document.querySelectorAll('.phase-tab').forEach(el => {
+  el.classList.toggle('active', el.dataset.phase === currentPhase);
+  el.onclick = () => {
+    currentPhase = el.dataset.phase;
+    document.querySelectorAll('.phase-tab').forEach(x => x.classList.toggle('active', x.dataset.phase === currentPhase));
+    expandedProductId = null;
+    editingKey = null;
+    haptic('soft');
+    renderResults();
+    updateMainButton();
+  };
+});
+
 // ============ Inventory: search + render ============
 // Единый список: каждый продукт — одна карточка. Итог по продукту виден сразу,
 // а по тапу карточка разворачивается и показывает отдельные записи — и ранее
@@ -408,6 +444,7 @@ function renderResults() {
     // (например, менеджер их деактивировал) — тоже показываем, чтобы не потерять.
     const seen = new Set(list.map(p => p.id));
     existingItems.forEach(o => {
+      if (o.phase !== currentPhase) return;
       if (!seen.has(o.product_id) && sumByProduct(o.product_id) > 0) {
         seen.add(o.product_id);
         list.push(productInfo(o.product_id));
@@ -492,7 +529,7 @@ function buildProductCard(p) {
         tg.showAlert(QTY_ERROR);
         return;
       }
-      addedItems.push({ product_id: p.id, name: p.name, quantity: val, _key: 'a' + (nextAddedKey++) });
+      addedItems.push({ product_id: p.id, name: p.name, quantity: val, phase: currentPhase, _key: 'a' + (nextAddedKey++) });
       editingKey = null;
       expandedProductId = null;   // свернуть карточку продукта
       hapticNotify('success');
@@ -606,9 +643,10 @@ function unitSuffix(p) {
 // Итог + кнопка «Отменить изменения» под списком.
 function renderCounter() {
   counterEl.innerHTML = '';
-  const totalRecords = existingItems.length + addedItems.length;
+  const phaseRecords = [...existingItems, ...addedItems].filter(o => o.phase === currentPhase);
+  const totalRecords = phaseRecords.length;
   if (totalRecords === 0 && !hasChanges()) return;
-  const uniq = new Set([...existingItems, ...addedItems].map(o => o.product_id)).size;
+  const uniq = new Set(phaseRecords.map(o => o.product_id)).size;
   const text = document.createElement('div');
   text.textContent = `${totalRecords} ${plural(totalRecords,'запись','записи','записей')} `
     + `по ${uniq} ${plural(uniq,'продукту','продуктам','продуктам')}`;
@@ -749,7 +787,7 @@ tg.MainButton.onClick(() => {
     if (!ok) return;
     const payload = {
       action: 'inventory',
-      items: addedItems.map(a => ({ product_id: a.product_id, name: a.name, quantity: a.quantity })),
+      items: addedItems.map(a => ({ product_id: a.product_id, name: a.name, quantity: a.quantity, phase: a.phase })),
       new_products: newProducts,
       edits: edits,
       deletes: deletedExistingIds,
