@@ -870,7 +870,29 @@ function tryRestoreDraft() {
   });
 }
 
-tg.MainButton.onClick(() => {
+// ============ Сжатие исходящих данных ============
+// tg.sendData ограничен 4096 байтами. Полная инвентаризация по всему каталогу
+// (особенно сразу в нескольких фазах — утро+приход+вечер за один заход)
+// легко превышает лимит, и sendData тогда молча ничего не отправляет — повар
+// жмёт «Завершить», и ничего не происходит. При большом объёме сжимаем gzip,
+// как и входящий снимок с сервера; маленькие payload шлём как есть — быстрее
+// и надёжнее на старых устройствах без CompressionStream.
+async function packOutgoing(payloadObj) {
+  const raw = JSON.stringify(payloadObj);
+  const bytes = new TextEncoder().encode(raw);
+  if (bytes.length <= 3000 || typeof CompressionStream === 'undefined') return raw;
+  try {
+    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
+    const compressed = new Uint8Array(await new Response(stream).arrayBuffer());
+    let binary = '';
+    compressed.forEach(b => { binary += String.fromCharCode(b); });
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  } catch (_) {
+    return raw;  // сжатие не удалось — шлём как есть, лучше попытаться, чем ничего
+  }
+}
+
+tg.MainButton.onClick(async () => {
   if (mode !== 'inv' || !hasChanges()) return;
   const payload = {
     action: 'inventory',
@@ -880,7 +902,7 @@ tg.MainButton.onClick(() => {
     deletes: deletedExistingIds,
   };
   clearDraft();
-  tg.sendData(JSON.stringify(payload));
+  tg.sendData(await packOutgoing(payload));
   tg.close();
 });
 
