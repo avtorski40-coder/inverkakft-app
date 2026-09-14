@@ -221,6 +221,20 @@ tg.ready();
 tg.expand();
 tg.enableClosingConfirmation();
 
+// Диалоги: нативные Telegram-окна (showConfirm/showAlert) появились только в
+// версии 6.2. В старых клиентах их колбэк может не срабатывать (нажатие «OK»
+// ничего не делает) — откатываемся на обычные окна браузера, чтобы кнопки
+// работали везде и повар не терял введённые данные.
+function verGE(v) { try { return tg.isVersionAtLeast && tg.isVersionAtLeast(v); } catch (_) { return false; } }
+function askConfirm(text, cb) {
+  if (verGE('6.2') && tg['showConfirm']) { try { tg['showConfirm'](text, cb); return; } catch (_) {} }
+  cb(window.confirm(text));
+}
+function alertMsg(text) {
+  if (verGE('6.2') && tg['showAlert']) { try { tg['showAlert'](text); return; } catch (_) {} }
+  window.alert(text);
+}
+
 // ============ Fallback каталог ============
 // Используется если бот не передал каталог (например открыли mini_app напрямую).
 const FALLBACK_PRODUCT_NAMES = [
@@ -526,7 +540,7 @@ function buildProductCard(p) {
       const val = parseQty(input.value);
       if (val === null) {
         hapticNotify('error');
-        tg.showAlert(QTY_ERROR);
+        alertMsg(QTY_ERROR);
         return;
       }
       addedItems.push({ product_id: p.id, name: p.name, quantity: val, phase: currentPhase, _key: 'a' + (nextAddedKey++) });
@@ -581,7 +595,7 @@ function buildRecordRow(item, product) {
       const val = parseQty(input.value);
       if (val === null) {
         hapticNotify('error');
-        tg.showAlert(QTY_ERROR);
+        alertMsg(QTY_ERROR);
         return;
       }
       item.quantity = val;
@@ -664,7 +678,7 @@ function renderCounter() {
 // добавления, удаления и новые продукты сбрасываются).
 function revertChanges() {
   if (!hasChanges()) return;
-  tg.showConfirm('Отменить все несохранённые изменения?', ok => {
+  askConfirm('Отменить все несохранённые изменения?', ok => {
     if (!ok) return;
     existingItems = EXISTING_SNAPSHOT.map(o => ({ ...o }));
     deletedExistingIds = [];
@@ -707,19 +721,19 @@ addNewBtn.onclick = () => {
   const name = newName.value.trim();
   if (name.length < 2 || name.length > 80) {
     hapticNotify('error');
-    tg.showAlert('Название: от 2 до 80 символов');
+    alertMsg('Название: от 2 до 80 символов');
     return;
   }
   if (!ALLOWED_UNITS.includes(selectedNewUnit)) {
     hapticNotify('error');
-    tg.showAlert('Выберите, как считать продукт: по весу или поштучно');
+    alertMsg('Выберите, как считать продукт: по весу или поштучно');
     return;
   }
   const unit = selectedNewUnit;
   const dup = PRODUCTS.find(p => p.name.toLowerCase() === name.toLowerCase());
   if (dup) {
     hapticNotify('warning');
-    tg.showAlert(`«${dup.name}» уже есть в списке`);
+    alertMsg(`«${dup.name}» уже есть в списке`);
     setMode('inv');
     searchEl.value = dup.name;
     expandedProductId = dup.id;
@@ -783,7 +797,7 @@ tg.MainButton.onClick(() => {
   if (mode !== 'inv' || !hasChanges()) return;
   const edits = collectEdits();
   const summary = changeSummaryParts().join(' ');
-  tg.showConfirm(`Сохранить изменения? ${summary}`, ok => {
+  askConfirm(`Сохранить изменения? ${summary}`, ok => {
     if (!ok) return;
     const payload = {
       action: 'inventory',
