@@ -775,6 +775,7 @@ function changeSummaryParts() {
 }
 
 function updateMainButton() {
+  saveDraft();
   const mb = tg.MainButton;
   if (mode !== 'inv' || !hasChanges()) {
     mb.hide();
@@ -793,28 +794,105 @@ function collectEdits() {
     .map(o => ({ id: o.id, quantity: o.quantity }));
 }
 
+// ============ Черновик в localStorage ============
+// Страховка от потери данных: если приложение закроется/зависнет до того как
+// sendData дойдёт до бота (баг диалога, обрыв связи, случайное закрытие) —
+// при повторном открытии на этом же телефоне несохранённое можно вернуть.
+// Само сохранение теперь без доп. диалога-подтверждения: кнопка уже
+// показывает сводку изменений, лишний confirm — только точка отказа.
+const DRAFT_KEY = 'inverkakft_draft_v1';
+
+function currentSnapshotIds() {
+  return EXISTING_SNAPSHOT.map(o => o.id).sort((a, b) => a - b);
+}
+
+function saveDraft() {
+  if (!hasChanges()) {
+    try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
+    return;
+  }
+  const edits = {};
+  existingItems.forEach(o => {
+    if (o.quantity !== existingOriginalQty[o.id]) edits[o.id] = o.quantity;
+  });
+  const draft = {
+    savedAt: new Date().toISOString(),
+    snapshotIds: currentSnapshotIds(),
+    addedItems, deletedExistingIds, newProducts, edits,
+    phase: currentPhase,
+  };
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch (_) {}
+}
+
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
+}
+
+// Восстанавливаем черновик, только если снимок с сервера тот же, что был на
+// момент сохранения (иначе данные могли устареть — молча стираем черновик).
+function tryRestoreDraft() {
+  let raw;
+  try { raw = localStorage.getItem(DRAFT_KEY); } catch (_) { return; }
+  if (!raw) return;
+  let draft;
+  try { draft = JSON.parse(raw); } catch (_) { clearDraft(); return; }
+  if (JSON.stringify(draft.snapshotIds) !== JSON.stringify(currentSnapshotIds())) {
+    clearDraft();
+    return;
+  }
+  let when = '';
+  try { when = new Date(draft.savedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); } catch (_) {}
+  askConfirm(`Есть несохранённые изменения от ${when} — восстановить?`, ok => {
+    if (!ok) { clearDraft(); return; }
+    (draft.newProducts || []).forEach(np => {
+      if (!PRODUCTS.some(p => p.id === np.tempId)) PRODUCTS.push({ id: np.tempId, name: np.name, unit: np.unit });
+      if (np.tempId <= nextTempId) nextTempId = np.tempId - 1;
+    });
+    newProducts = (draft.newProducts || []).map(np => ({ ...np }));
+    addedItems = (draft.addedItems || []).map(a => ({ ...a }));
+    let maxKey = 0;
+    addedItems.forEach(a => {
+      const m = /^a(\d+)$/.exec(a._key || '');
+      if (m) maxKey = Math.max(maxKey, parseInt(m[1], 10));
+    });
+    nextAddedKey = maxKey + 1;
+    deletedExistingIds = (draft.deletedExistingIds || []).slice();
+    existingItems = existingItems.filter(o => !deletedExistingIds.includes(o.id));
+    Object.entries(draft.edits || {}).forEach(([id, qty]) => {
+      const item = existingItems.find(o => o.id === Number(id));
+      if (item) item.quantity = qty;
+    });
+    if (draft.phase && PHASES.includes(draft.phase)) currentPhase = draft.phase;
+    document.querySelectorAll('.phase-tab').forEach(x => x.classList.toggle('active', x.dataset.phase === currentPhase));
+    hapticNotify('success');
+    renderResults();
+    updateMainButton();
+  });
+}
+
 tg.MainButton.onClick(() => {
   if (mode !== 'inv' || !hasChanges()) return;
-  const edits = collectEdits();
-  const summary = changeSummaryParts().join(' ');
-  askConfirm(`Сохранить изменения? ${summary}`, ok => {
-    if (!ok) return;
-    const payload = {
-      action: 'inventory',
-      items: addedItems.map(a => ({ product_id: a.product_id, name: a.name, quantity: a.quantity, phase: a.phase })),
-      new_products: newProducts,
-      edits: edits,
-      deletes: deletedExistingIds,
-    };
-    tg.sendData(JSON.stringify(payload));
-    tg.close();
-  });
+  const payload = {
+    action: 'inventory',
+    items: addedItems.map(a => ({ product_id: a.product_id, name: a.name, quantity: a.quantity, phase: a.phase })),
+    new_products: newProducts,
+    edits: collectEdits(),
+    deletes: deletedExistingIds,
+  };
+  clearDraft();
+  tg.sendData(JSON.stringify(payload));
+  tg.close();
 });
 
 // ============ Init ============
 (async () => {
   applyParsed(await parsePayload());
   renderResults();
+  // ВАЖНО: сначала пробуем восстановить черновик, и только потом
+  // updateMainButton() — он вызывает saveDraft(), который стирает черновик,
+  // если на этот момент нет изменений (а до восстановления их и нет).
+  // Обратный порядок стирал черновик до того, как успевал показаться диалог.
+  tryRestoreDraft();
   updateMainButton();
   searchEl.focus();
 })();
