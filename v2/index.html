@@ -896,7 +896,10 @@ tg.MainButton.onClick(async () => {
   if (mode !== 'inv' || !hasChanges()) return;
   const payload = {
     action: 'inventory',
-    items: addedItems.map(a => ({ product_id: a.product_id, name: a.name, quantity: a.quantity, phase: a.phase })),
+    // "name" в payload не нужен — бот определяет продукт по product_id
+    // (для новых продуктов имя уже есть в new_products). Экономит место
+    // под лимит sendData в 4096 байт при больших каталогах.
+    items: addedItems.map(a => ({ product_id: a.product_id, quantity: a.quantity, phase: a.phase })),
     new_products: newProducts,
     edits: collectEdits(),
     deletes: deletedExistingIds,
